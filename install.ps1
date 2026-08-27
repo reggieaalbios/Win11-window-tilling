@@ -135,7 +135,6 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
         Copy-Item -LiteralPath $destination -Destination (Join-Path $paths.ArtifactRoot $component.asset.file) -Force
         $old = @($Inventory | Where-Object id -eq $component.id)[0]
         if ($IncludeRecovery -and $old.detected) {
-            if (-not $old.version -or $old.version -notmatch $mapping.productVersionPattern) { throw "Installed DWMBlurGlass '$($old.version)' does not match a tested recovery artifact." }
             $componentRecovery = Join-Path $recoveryRoot $component.id
             New-Item -ItemType Directory -Path $componentRecovery -Force | Out-Null
             if ($old.recoverySource -and (Test-Path -LiteralPath $old.recoverySource)) {
@@ -158,6 +157,7 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
         Copy-Item -LiteralPath $destination -Destination (Join-Path $paths.ArtifactRoot $mapping.file) -Force
         $old = @($Inventory | Where-Object id -eq $component.id)[0]
         if ($IncludeRecovery -and $old.detected) {
+            if (-not $old.version -or $old.version -notmatch $mapping.productVersionPattern) { throw "Installed DWMBlurGlass '$($old.version)' does not match a tested recovery artifact." }
             $componentRecovery = Join-Path $recoveryRoot $component.id
             New-Item -ItemType Directory -Path $componentRecovery -Force | Out-Null
             Copy-Item -LiteralPath $destination -Destination (Join-Path $componentRecovery $mapping.file) -Force

@@ -117,6 +117,7 @@ try {
     $moduleText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Raw
     Assert ($moduleText -notmatch 'Select-Object\s+-Reverse') 'Module uses Select-Object -Reverse, which is unavailable in Windows PowerShell 5.1.'
     Assert ($moduleText -notmatch '\$missing\.Name') 'Missing dependency reporting must use the inventory id property.'
+    Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"
     }
