@@ -46,8 +46,8 @@ if ($Action -eq 'Install' -and -not (Test-Path -LiteralPath $statePath)) {
     if (Test-Path -LiteralPath $operationStatePath) {
         try {
             $previousOperation = Get-Content -LiteralPath $operationStatePath -Raw | ConvertFrom-Json
-            if ($previousOperation.status -eq 'failed') {
-                Write-Host "Previous incomplete operation failed at '$($previousOperation.step)'; continuing with repair instead of downloading and purging the stack again." -ForegroundColor Yellow
+            if ($previousOperation.status -in @('failed','running')) {
+                Write-Host "Previous operation was interrupted at '$($previousOperation.step)'; continuing with repair instead of downloading and purging the stack again." -ForegroundColor Yellow
                 $Action = 'Repair'
             }
         } catch {
