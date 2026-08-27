@@ -104,13 +104,20 @@ $ahkDestination = Join-Path $resolvedOutput '.config\komorebi\komorebi.ahk'
 $renderedAhk = [IO.File]::ReadAllText($ahkDestination).Replace('{{MAIN_MODIFIER_AHK}}', $MainModifier)
 [IO.File]::WriteAllText($ahkDestination, $renderedAhk, $utf8NoBom)
 
+$komorebiDestination = Join-Path $resolvedOutput '.config\komorebi\komorebi.json'
+$renderedKomorebi = [IO.File]::ReadAllText($komorebiDestination)
+foreach ($token in $tokens.GetEnumerator()) {
+    $renderedKomorebi = $renderedKomorebi.Replace($token.Key, $token.Value)
+}
+[IO.File]::WriteAllText($komorebiDestination, $renderedKomorebi, $utf8NoBom)
+
 $shortcutsDestination = Join-Path $resolvedOutput '.config\yasb\shortcuts.json'
 $renderedShortcuts = [IO.File]::ReadAllText($shortcutsDestination).
     Replace('{{MAIN_MODIFIER_LABEL}}', $MainModifier).
     Replace('"Caps"', ('"{0}"' -f $MainModifier))
 [IO.File]::WriteAllText($shortcutsDestination, $renderedShortcuts, $utf8NoBom)
 
-$unresolvedFiles = @($ahkDestination, $shortcutsDestination, $yasbDestination)
+$unresolvedFiles = @($ahkDestination, $komorebiDestination, $shortcutsDestination, $yasbDestination)
 foreach ($unresolvedFile in $unresolvedFiles) {
     $content = [IO.File]::ReadAllText($unresolvedFile)
     if ($content -match '{{[A-Z0-9_]+}}') {

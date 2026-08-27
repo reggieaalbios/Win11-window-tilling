@@ -134,7 +134,7 @@ widgets:
     type: "yasb.shortcut_guide.CoordinatedShortcutGuideWidget"
     options:
       label: ""
-      data_path: "{{USER_PROFILE_WIN}}\\.config\\yasb\\shortcuts.json"
+      data_path: "{{USER_PROFILE_URI}}/.config/yasb/shortcuts.json"
       popup:
         width: 520
         height: 430

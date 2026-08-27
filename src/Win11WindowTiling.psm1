@@ -150,7 +150,28 @@ function Get-WwtHealth {
         $results.Add([pscustomobject]@{ Name=$item.id; Healthy=[bool]$item.capable; Required=[bool]$item.required; Detail=$detail })
     }
     $task = Get-ScheduledTask -TaskName 'Komorebi Delayed Startup' -ErrorAction SilentlyContinue
-    $results.Add([pscustomobject]@{ Name='startup-task'; Healthy=[bool]$task; Required=$true; Detail=if($task){$task.State}else{'not detected'} })
+    $startupScript = Join-Path $env:USERPROFILE '.config\komorebi\start-komorebi.ps1'
+    $startupHealthy = [bool]$task -and (Test-Path -LiteralPath $startupScript)
+    if ($task) {
+        $managedAction = @($task.Actions | Where-Object { $_.Arguments -like "*$startupScript*" }).Count -gt 0
+        $startupHealthy = $startupHealthy -and $managedAction
+    }
+    $results.Add([pscustomobject]@{ Name='startup-task'; Healthy=$startupHealthy; Required=$true; Detail=if($task){"$($task.State); $startupScript"}else{'not detected'} })
+    $komorebiConfig = Join-Path $env:USERPROFILE '.config\komorebi\komorebi.json'
+    $applicationsConfig = Join-Path $env:USERPROFILE '.config\komorebi\applications.json'
+    $komorebiHealthy = (Test-Path -LiteralPath $komorebiConfig) -and (Test-Path -LiteralPath $applicationsConfig)
+    if ($komorebiHealthy) {
+        $komorebiText = Get-Content -LiteralPath $komorebiConfig -Raw
+        $komorebiHealthy = ($komorebiText -notmatch '{{[A-Z0-9_]+}}') -and ($komorebiText -notmatch '\$Env:KOMOREBI_CONFIG_HOME')
+    }
+    $results.Add([pscustomobject]@{ Name='komorebi-config'; Healthy=$komorebiHealthy; Required=$true; Detail=$komorebiConfig })
+    $yasbConfig = Join-Path $env:USERPROFILE '.config\yasb\config.yaml'
+    $yasbHealthy = Test-Path -LiteralPath $yasbConfig
+    if ($yasbHealthy) {
+        $yasbText = Get-Content -LiteralPath $yasbConfig -Raw
+        $yasbHealthy = ($yasbText -notmatch '{{[A-Z0-9_]+}}') -and ($yasbText -notmatch 'data_path:\s*"[A-Za-z]:\\')
+    }
+    $results.Add([pscustomobject]@{ Name='yasb-config'; Healthy=$yasbHealthy; Required=$true; Detail=$yasbConfig })
     return $results
 }
 
@@ -325,6 +346,11 @@ function Get-WwtComponentInventory {
             $fingerprint = [string]$component.requiredFingerprint
             $marker = Join-Path (Split-Path -Parent $found) 'wwt-build.json'
             $capable = (Test-Path -LiteralPath $marker) -and ((Get-FileHash -LiteralPath $marker -Algorithm SHA256).Hash -eq $fingerprint)
+        }
+        if ($component.id -eq 'dwmblurglass' -and $found) {
+            $task = Get-ScheduledTask -TaskName 'DWMBlurGlass_Extend' -ErrorAction SilentlyContinue
+            $state = Join-Path (Get-WwtPaths -RepositoryRoot $RepositoryRoot).ProductRoot 'dwmblurglass-state.json'
+            $capable = [bool]$task -and (Test-Path -LiteralPath $state)
         }
         if ($component.id -in @('adaptive-theme-engine','wallpapers') -and $found) { $capable = $true }
         $recoverySource = $null

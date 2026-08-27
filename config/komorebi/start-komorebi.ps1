@@ -3,7 +3,11 @@ $ErrorActionPreference = 'Continue'
 $sessionId = (Get-Process -Id $PID).SessionId
 $configHome = Join-Path $env:USERPROFILE '.config\komorebi'
 $startupLog = Join-Path $configHome 'startup.log'
-$autoHotkey = Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey\v2\AutoHotkey64.exe'
+$autoHotkeyCandidates = @(
+    (Join-Path $env:ProgramFiles 'AutoHotkey\v2\AutoHotkey64.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey\v2\AutoHotkey64.exe')
+)
+$autoHotkey = @($autoHotkeyCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)[0]
 $komorebiScript = Join-Path $configHome 'komorebi.ahk'
 $komorebi = Join-Path $env:ProgramFiles 'komorebi\bin\komorebi.exe'
 $komorebiConfig = Join-Path $configHome 'komorebi.json'
@@ -32,8 +36,8 @@ function Test-KomorebiHotkeys {
 
 function Start-KomorebiHotkeys {
     if (Test-KomorebiHotkeys) { return }
-    if (-not (Test-Path -LiteralPath $autoHotkey)) {
-        Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) missing: $autoHotkey"
+    if (-not $autoHotkey -or -not (Test-Path -LiteralPath $autoHotkey)) {
+        Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) missing AutoHotkey v2: $($autoHotkeyCandidates -join '; ')"
         return
     }
     if (-not (Test-Path -LiteralPath $komorebiScript)) {
