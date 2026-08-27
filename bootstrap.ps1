@@ -95,7 +95,9 @@ try {
     if ($NonInteractive) { $arguments += '-NonInteractive' }
     if ($ForceReinstall) { $arguments += '-ForceReinstall' }
     & powershell.exe @arguments
-    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    if ($LASTEXITCODE -ne 0) {
+        throw "Installer process failed with exit code $LASTEXITCODE. See '$productRoot\logs' for details."
+    }
 }
 finally {
     if (Test-Path -LiteralPath $downloadRoot) { Remove-Item -LiteralPath $downloadRoot -Recurse -Force }
