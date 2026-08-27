@@ -30,7 +30,8 @@ function Write-Stage([string]$Name,[string]$Detail) {
     Write-Progress -Activity "Win11 Window Tiling - $Action" -Status $Detail -PercentComplete $percent
     Write-Host ("[{0,3}%] {1}: {2}" -f $percent,$Name,$Detail) -ForegroundColor Cyan
     Write-WwtLog -RepositoryRoot $RepositoryRoot -Event 'stage' -Data @{ operationId=$operationId; action=$Action; stage=$Name; detail=$Detail; percent=$percent }
-    Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $Action -Step $Name -OperationId $operationId | Out-Null
+    $status = if ($Name -eq 'complete') { 'complete' } else { 'running' }
+    Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $Action -Step $Name -Status $status -OperationId $operationId | Out-Null
 }
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -75,6 +76,18 @@ function Show-Plan {
 function Stop-WwtProcesses {
     Get-Process -Name komorebi,yasb,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
+function Remove-WwtOperationCaches([string[]]$KeepOperationIds = @()) {
+    if (-not (Test-Path -LiteralPath $paths.CacheRoot)) { return }
+    $resolvedCacheRoot = [IO.Path]::GetFullPath($paths.CacheRoot).TrimEnd('\') + '\'
+    foreach ($directory in @(Get-ChildItem -LiteralPath $paths.CacheRoot -Directory -ErrorAction SilentlyContinue)) {
+        if ($KeepOperationIds -contains $directory.Name) { continue }
+        $resolvedDirectory = [IO.Path]::GetFullPath($directory.FullName).TrimEnd('\') + '\'
+        if (-not $resolvedDirectory.StartsWith($resolvedCacheRoot,[StringComparison]::OrdinalIgnoreCase)) {
+            throw "Refusing to prune cache outside '$($paths.CacheRoot)': $($directory.FullName)"
+        }
+        Remove-Item -LiteralPath $directory.FullName -Recurse -Force
+    }
+}
 function Get-WwtSystemInventory {
     $processes = @(Get-Process -Name komorebi,yasb,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI -ErrorAction SilentlyContinue | Select-Object ProcessName,Id,Path,@{n='Version';e={$_.FileVersion}})
     $tasks = @()
@@ -97,9 +110,7 @@ function Clear-WwtStaleProductData {
     if (Test-Path $paths.SourceRoot) {
         Get-ChildItem $paths.SourceRoot -Directory | Where-Object { $_.FullName -ne $RepositoryRoot } | Remove-Item -Recurse -Force
     }
-    if (Test-Path $paths.CacheRoot) {
-        Get-ChildItem $paths.CacheRoot -Directory | Where-Object Name -ne $operationId | Remove-Item -Recurse -Force
-    }
+    Remove-WwtOperationCaches -KeepOperationIds @($operationId)
     foreach ($state in @($paths.StatePath,$paths.OperationStatePath)) { if(Test-Path $state){Remove-Item -LiteralPath $state -Force} }
 }
 function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery) {
@@ -227,6 +238,7 @@ try {
     }
 
     if (-not $NonInteractive -and -not (Confirm-Choice 'Continue? [y/N]')) { exit 0 }
+    if ($mutating) { Remove-WwtOperationCaches -KeepOperationIds @($operationId) }
     if ($Action -eq 'Uninstall') {
         Write-Stage 'backup' 'Preserving managed baselines before uninstall'
         $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId -IncludeMachineState
@@ -238,6 +250,7 @@ try {
             Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot
         }
         Write-Stage 'complete' 'Uninstall completed; dependencies were kept unless explicitly selected'
+        Remove-WwtOperationCaches
         Write-Progress -Activity "Win11 Window Tiling - $Action" -Completed
         exit 0
     }
@@ -277,6 +290,7 @@ try {
     $failed = @($health | Where-Object { $_.Required -and -not $_.Healthy })
     if ($failed) { throw "Doctor failed: $(($failed.Name) -join ', ')" }
     Write-Stage 'complete' 'Installation completed successfully'
+    Remove-WwtOperationCaches
     Write-Progress -Activity "Win11 Window Tiling - $Action" -Completed
     Write-Host "Complete. State and local logs: $($paths.ProductRoot)" -ForegroundColor Green
 }
@@ -295,6 +309,10 @@ catch {
         } catch {
             Write-Host "Rollback also failed: $($_.Exception.Message)" -ForegroundColor Red
         }
+    }
+    if ($mutating) {
+        try { Remove-WwtOperationCaches -KeepOperationIds @($operationId) }
+        catch { Write-Warning "Could not prune old operation caches: $($_.Exception.Message)" }
     }
     Write-Error "Action '$Action' failed at stage '$script:stage': $($_.Exception.Message)" -ErrorAction Continue
     if ($PauseOnFailure -and -not $NonInteractive) {

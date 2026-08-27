@@ -117,6 +117,9 @@ try {
     $bootstrapText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'bootstrap.ps1') -Raw
     Assert ($bootstrapText -notmatch 'if \(\$LASTEXITCODE -ne 0\) \{ exit') 'Bootstrap must not close the caller PowerShell session on installer failure.'
     Assert ($bootstrapText -match "previousOperation\.status -in @\('failed','running'\)") 'Bootstrap does not continue failed and interrupted installs through repair.'
+    Assert ($installText -match 'function Remove-WwtOperationCaches') 'Bounded operation-cache cleanup is missing.'
+    Assert ($installText -match 'Remove-WwtOperationCaches -KeepOperationIds @\(\$operationId\)') 'Failed-operation cache retention is not bounded to the current operation.'
+    Assert ($installText -match 'if \(\$Name -eq ''complete''\) \{ ''complete'' \}') 'Completed operations remain marked as running.'
     $moduleText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Raw
     Assert ($moduleText -notmatch 'Select-Object\s+-Reverse') 'Module uses Select-Object -Reverse, which is unavailable in Windows PowerShell 5.1.'
     Assert ($moduleText -notmatch '\$missing\.Name') 'Missing dependency reporting must use the inventory id property.'
