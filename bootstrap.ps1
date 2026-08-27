@@ -41,6 +41,21 @@ function Ensure-WinGet {
     if (-not (Get-Command winget.exe -ErrorAction SilentlyContinue)) { throw 'WinGet remains unavailable after Microsoft App Installer repair.' }
 }
 
+if ($Action -eq 'Install' -and -not (Test-Path -LiteralPath $statePath)) {
+    $operationStatePath = Join-Path $productRoot 'operation-state.json'
+    if (Test-Path -LiteralPath $operationStatePath) {
+        try {
+            $previousOperation = Get-Content -LiteralPath $operationStatePath -Raw | ConvertFrom-Json
+            if ($previousOperation.status -eq 'failed') {
+                Write-Host "Previous incomplete operation failed at '$($previousOperation.step)'; continuing with repair instead of downloading and purging the stack again." -ForegroundColor Yellow
+                $Action = 'Repair'
+            }
+        } catch {
+            Write-Warning "Could not read the previous operation checkpoint; normal install detection will continue. $($_.Exception.Message)"
+        }
+    }
+}
+
 if ($Action -eq 'Install' -and (Test-WwtExistingInstall)) {
     Write-Host 'Win11 Window Tiling is already installed.' -ForegroundColor Yellow
     if ($NonInteractive) {
