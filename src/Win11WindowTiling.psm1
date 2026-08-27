@@ -492,6 +492,7 @@ function Install-WwtMissingDependencies {
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     foreach ($component in @($manifest.components)) {
         $current = @($inventory | Where-Object id -eq $component.id)[0]
+        if ($component.installStrategy -eq 'guarded-dwm' -and $current.capable) { continue }
         if (-not $ReinstallAll -and $current.capable) { continue }
         if ($component.installStrategy -eq 'winget-stable') {
             if (-not $winget) { throw "WinGet is required to install '$($component.id)'." }
@@ -527,12 +528,13 @@ function Install-WwtMissingDependencies {
 }
 
 function Uninstall-WwtDependencies {
-    param([Parameter(Mandatory)][string]$RepositoryRoot)
+    param([Parameter(Mandatory)][string]$RepositoryRoot,[switch]$PreserveGuardedDwm)
     $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     $components = @($manifest.components)
     for ($index = $components.Count - 1; $index -ge 0; $index--) {
         $component = $components[$index]
+        if ($PreserveGuardedDwm -and $component.installStrategy -eq 'guarded-dwm') { continue }
         if ($component.installStrategy -eq 'winget-stable' -and $winget) {
             Start-Process -FilePath $winget.Source -ArgumentList @('uninstall','--id',$component.packageId,'--exact','--silent','--disable-interactivity') -Wait -PassThru -NoNewWindow | Out-Null
         } elseif ($component.id -eq 'yasb' -and $component.productCode) {

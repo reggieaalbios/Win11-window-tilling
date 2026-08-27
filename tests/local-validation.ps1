@@ -133,6 +133,8 @@ try {
     Assert ($moduleText -notmatch '\$missing\.Name') 'Missing dependency reporting must use the inventory id property.'
     Assert ($moduleText -match "DWMBlurGlass_Extend'") 'DWMBlurGlass health must verify its logon task.'
     Assert ($moduleText -match 'dwmblurglass-state\.json') 'DWMBlurGlass health must verify deployment state.'
+    Assert ($moduleText -match 'PreserveGuardedDwm') 'Full reinstall must preserve healthy guarded DWM components that Windows may lock.'
+    Assert ($moduleText -match 'installStrategy -eq ''guarded-dwm'' -and \$current\.capable') 'Healthy guarded DWM components must be skipped during forced dependency reinstall.'
     Assert ($moduleText -match 'komorebi-config') 'Doctor must validate the rendered Komorebi config.'
     Assert ($moduleText -match 'yasb-config') 'Doctor must validate the rendered YASB config.'
     $startupText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\komorebi\start-komorebi.ps1') -Raw

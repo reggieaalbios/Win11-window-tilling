@@ -267,7 +267,7 @@ try {
         Write-Stage 'purge' 'Removing the declared stack and managed configuration targets'
         if ($InjectFailureStage -eq 'before-purge') { throw 'Injected failure before purge.' }
         Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Null
-        Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot
+        Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot -PreserveGuardedDwm
         Remove-WwtManagedTargets
         Clear-WwtStaleProductData
         Write-Stage 'dependencies' 'Installing freshly resolved stable dependencies and immutable exceptions'
