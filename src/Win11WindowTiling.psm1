@@ -504,7 +504,9 @@ function Uninstall-WwtDependencies {
     param([Parameter(Mandatory)][string]$RepositoryRoot)
     $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-    foreach ($component in @($manifest.components | Select-Object -Reverse)) {
+    $components = @($manifest.components)
+    for ($index = $components.Count - 1; $index -ge 0; $index--) {
+        $component = $components[$index]
         if ($component.installStrategy -eq 'winget-stable' -and $winget) {
             Start-Process -FilePath $winget.Source -ArgumentList @('uninstall','--id',$component.packageId,'--exact','--silent','--disable-interactivity') -Wait -PassThru -NoNewWindow | Out-Null
         } elseif ($component.id -eq 'yasb' -and $component.productCode) {
