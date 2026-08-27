@@ -52,6 +52,12 @@ try {
         $renderRoot = Join-Path $temporaryRoot "render-$modifier"
         & (Join-Path $repositoryRoot 'scripts\render-config.ps1') -OutputRoot $renderRoot -MainModifier $modifier | Out-Null
         Assert (Test-Path -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.ahk')) "Renderer failed for $modifier."
+        $renderedYasb = Get-Content -LiteralPath (Join-Path $renderRoot '.config\yasb\config.yaml') -Raw
+        $renderedKomorebi = Get-Content -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.json') -Raw
+        Assert ($renderedYasb -match 'data_path: "[A-Za-z]:/') "YASB shortcut data_path is not rendered as a YAML-safe Windows path for $modifier."
+        Assert ($renderedYasb -notmatch 'data_path: "[A-Za-z]:\\') "YASB shortcut data_path contains unescaped backslashes for $modifier."
+        Assert ($renderedKomorebi -match '"app_specific_configuration_path": "[A-Za-z]:/.+/.config/komorebi/applications.json"') "Komorebi application config path is not rendered as an absolute path for $modifier."
+        Assert ($renderedKomorebi -notmatch '\$Env:KOMOREBI_CONFIG_HOME|{{USER_PROFILE_URI}}') "Komorebi config contains unresolved environment or render tokens for $modifier."
     }
 
     Import-Module (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Force
@@ -100,9 +106,11 @@ try {
     [IO.File]::WriteAllText($inputPath,"n`r`n")
     $oldProfile=$env:USERPROFILE; $oldLocal=$env:LOCALAPPDATA
     $env:USERPROFILE=$declineRoot; $env:LOCALAPPDATA=$declineLocal
-    $process = Start-Process powershell.exe -ArgumentList @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $repositoryRoot 'bootstrap.ps1')) -RedirectStandardInput $inputPath -Wait -PassThru -WindowStyle Hidden
+    $bootstrapPath = Join-Path $repositoryRoot 'bootstrap.ps1'
+    & cmd.exe /d /c "type `"$inputPath`" | powershell.exe -NoProfile -ExecutionPolicy Bypass -File `"$bootstrapPath`""
+    $declineExitCode = $LASTEXITCODE
     $env:USERPROFILE=$oldProfile; $env:LOCALAPPDATA=$oldLocal
-    Assert ($process.ExitCode -eq 0) 'Declined reinstall did not exit successfully.'
+    Assert ($declineExitCode -eq 0) 'Declined reinstall did not exit successfully.'
     Assert (-not (Test-Path -LiteralPath (Join-Path $declineLocal 'Win11WindowTilling'))) 'Declined reinstall changed product state or downloaded a snapshot.'
 
     $installText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'install.ps1') -Raw
@@ -123,6 +131,13 @@ try {
     $moduleText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Raw
     Assert ($moduleText -notmatch 'Select-Object\s+-Reverse') 'Module uses Select-Object -Reverse, which is unavailable in Windows PowerShell 5.1.'
     Assert ($moduleText -notmatch '\$missing\.Name') 'Missing dependency reporting must use the inventory id property.'
+    Assert ($moduleText -match "DWMBlurGlass_Extend'") 'DWMBlurGlass health must verify its logon task.'
+    Assert ($moduleText -match 'dwmblurglass-state\.json') 'DWMBlurGlass health must verify deployment state.'
+    Assert ($moduleText -match 'komorebi-config') 'Doctor must validate the rendered Komorebi config.'
+    Assert ($moduleText -match 'yasb-config') 'Doctor must validate the rendered YASB config.'
+    $startupText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\komorebi\start-komorebi.ps1') -Raw
+    Assert ($startupText -match '\$env:ProgramFiles ''AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must find the Program Files AutoHotkey v2 install.'
+    Assert ($startupText -match '\$env:LOCALAPPDATA ''Programs\\AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must retain the per-user AutoHotkey v2 fallback.'
     Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"
