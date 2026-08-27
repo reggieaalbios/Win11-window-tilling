@@ -231,7 +231,7 @@ function Install-WwtConfiguration {
     $platform = Test-WwtPlatform -Manifest $manifest
     if (-not $platform.Healthy) { throw "Unsupported platform: $($platform.Detail)" }
     $missing = @(Get-WwtComponentInventory -RepositoryRoot $RepositoryRoot | Where-Object { $_.required -and -not $_.capable -and $_.installStrategy -ne 'bundled-config' })
-    if ($missing) { throw "Required dependencies are missing: $(($missing.Name) -join ', '). Dependency acquisition is the next Phase 5 increment." }
+    if ($missing) { throw "Required dependencies are missing: $(($missing.id) -join ', ')." }
 
     $staging = Join-Path $paths.ProductRoot 'staging\config'
     & (Join-Path $RepositoryRoot 'scripts\render-config.ps1') -OutputRoot $staging -MainModifier $MainModifier | Out-Null

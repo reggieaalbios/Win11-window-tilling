@@ -116,6 +116,7 @@ try {
     Assert ($bootstrapText -notmatch 'if \(\$LASTEXITCODE -ne 0\) \{ exit') 'Bootstrap must not close the caller PowerShell session on installer failure.'
     $moduleText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Raw
     Assert ($moduleText -notmatch 'Select-Object\s+-Reverse') 'Module uses Select-Object -Reverse, which is unavailable in Windows PowerShell 5.1.'
+    Assert ($moduleText -notmatch '\$missing\.Name') 'Missing dependency reporting must use the inventory id property.'
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"
     }
