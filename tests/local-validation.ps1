@@ -111,6 +111,7 @@ try {
     }
     Assert ($installText -match 'Restore-WwtStack') 'Automatic rollback hook is missing.'
     Assert ($installText -match 'Non-interactive reinstall requires -ForceReinstall') 'Destructive unattended guard is missing.'
+    Assert ($installText -notmatch "'download'[^\r\n]+--architecture") 'WinGet download must allow mixed-architecture dependency graphs.'
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"
     }

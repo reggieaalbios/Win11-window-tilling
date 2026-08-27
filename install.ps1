@@ -110,7 +110,9 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
     foreach ($component in @($manifest.components | Where-Object installStrategy -eq 'winget-stable')) {
         $destination = Join-Path $newRoot $component.id
         New-Item -ItemType Directory -Path $destination -Force | Out-Null
-        $args = @('download','--id',$component.packageId,'--exact','--source','winget','--architecture','x64','--download-directory',$destination,'--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
+        # Do not constrain the complete dependency graph to x64. Some x64 packages
+        # (notably CAVA) legitimately depend on x86 runtime packages.
+        $args = @('download','--id',$component.packageId,'--exact','--source','winget','--download-directory',$destination,'--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
         $p = Start-Process $winget.Source -ArgumentList $args -Wait -PassThru -NoNewWindow
         if ($p.ExitCode -ne 0) { throw "Could not prepare latest stable artifact for '$($component.id)'." }
         if ($IncludeRecovery) {
@@ -119,7 +121,7 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
             if ($old.detected -and $old.version) {
                 $destination = Join-Path $recoveryRoot $component.id
                 New-Item -ItemType Directory -Path $destination -Force | Out-Null
-                $args = @('download','--id',$component.packageId,'--version',$old.version,'--exact','--source','winget','--architecture','x64','--download-directory',$destination,'--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
+                $args = @('download','--id',$component.packageId,'--version',$old.version,'--exact','--source','winget','--download-directory',$destination,'--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
                 $p = Start-Process $winget.Source -ArgumentList $args -Wait -PassThru -NoNewWindow
                 if ($p.ExitCode -ne 0) { throw "Could not stage recovery artifact for '$($component.id)' $($old.version)." }
             }
