@@ -108,6 +108,7 @@ try {
 
     $arguments = @('-NoProfile','-ExecutionPolicy','Bypass','-File',(Join-Path $snapshotRoot 'install.ps1'),'-Action',$Action,'-MainModifier',$MainModifier,'-SnapshotCommit',$resolvedCommit,'-SnapshotSha256',$archiveHash)
     if ($NonInteractive) { $arguments += '-NonInteractive' }
+    if (-not $NonInteractive) { $arguments += '-PauseOnFailure' }
     if ($ForceReinstall) { $arguments += '-ForceReinstall' }
     & powershell.exe @arguments
     if ($LASTEXITCODE -ne 0) {

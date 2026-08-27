@@ -7,6 +7,7 @@ param(
     [switch]$NonInteractive,
     [switch]$ForceReinstall,
     [switch]$RemoveDependencies,
+    [switch]$PauseOnFailure,
     [ValidateSet('','before-purge','dependency-installation','config-deployment','startup-registration')]
     [string]$InjectFailureStage = '',
     [string]$SnapshotCommit,
@@ -43,6 +44,7 @@ function Invoke-SelfElevation {
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($ForceReinstall) { $values += '-ForceReinstall' }
     if ($RemoveDependencies) { $values += '-RemoveDependencies' }
+    if (-not $NonInteractive) { $values += '-PauseOnFailure' }
     if ($InjectFailureStage) { $values += @('-InjectFailureStage',$InjectFailureStage) }
     if ($SnapshotCommit) { $values += @('-SnapshotCommit',$SnapshotCommit) }
     if ($SnapshotSha256) { $values += @('-SnapshotSha256',$SnapshotSha256) }
@@ -294,6 +296,10 @@ catch {
             Write-Host "Rollback also failed: $($_.Exception.Message)" -ForegroundColor Red
         }
     }
-    Write-Error "Action '$Action' failed at stage '$script:stage': $($_.Exception.Message)"
+    Write-Error "Action '$Action' failed at stage '$script:stage': $($_.Exception.Message)" -ErrorAction Continue
+    if ($PauseOnFailure -and -not $NonInteractive) {
+        Write-Host ''
+        Read-Host 'Press Enter to close this installer window'
+    }
     exit 1
 }

@@ -111,6 +111,8 @@ try {
     }
     Assert ($installText -match 'Restore-WwtStack') 'Automatic rollback hook is missing.'
     Assert ($installText -match 'Non-interactive reinstall requires -ForceReinstall') 'Destructive unattended guard is missing.'
+    Assert ($installText -match "Read-Host 'Press Enter to close this installer window'") 'Interactive elevated failures do not remain visible.'
+    Assert ($installText -match 'Write-Error[^\r\n]+-ErrorAction Continue') 'Failure reporting can terminate before the interactive pause.'
     Assert ($installText -notmatch "'download'[^\r\n]+--architecture") 'WinGet download must allow mixed-architecture dependency graphs.'
     $bootstrapText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'bootstrap.ps1') -Raw
     Assert ($bootstrapText -notmatch 'if \(\$LASTEXITCODE -ne 0\) \{ exit') 'Bootstrap must not close the caller PowerShell session on installer failure.'
