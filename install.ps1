@@ -8,6 +8,7 @@ param(
     [switch]$ForceReinstall,
     [switch]$RemoveDependencies,
     [switch]$PauseOnFailure,
+    [switch]$PauseOnExit,
     [ValidateSet('','before-purge','dependency-installation','config-deployment','startup-registration')]
     [string]$InjectFailureStage = '',
     [string]$SnapshotCommit,
@@ -40,11 +41,22 @@ function Test-Administrator {
 function Join-QuotedArguments([string[]]$Values) {
     ($Values | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"','\"') + '"' } else { $_ } }) -join ' '
 }
+function Wait-WwtInstallerExit {
+    if ($NonInteractive) { return }
+    Write-Host ''
+    Write-Host 'Press any key to close this installer window...'
+    try {
+        $null = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+    } catch {
+        Read-Host 'Press Enter to close this installer window' | Out-Null
+    }
+}
 function Invoke-SelfElevation {
     $values = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action',$Action,'-MainModifier',$MainModifier)
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($ForceReinstall) { $values += '-ForceReinstall' }
     if ($RemoveDependencies) { $values += '-RemoveDependencies' }
+    if ($PauseOnExit) { $values += '-PauseOnExit' }
     if (-not $NonInteractive) { $values += '-PauseOnFailure' }
     if ($InjectFailureStage) { $values += @('-InjectFailureStage',$InjectFailureStage) }
     if ($SnapshotCommit) { $values += @('-SnapshotCommit',$SnapshotCommit) }
@@ -220,6 +232,9 @@ function Restore-WwtRecoveryDependencies([string]$PreparationPath) {
     }
 }
 
+if (-not $NonInteractive -and -not $PSBoundParameters.ContainsKey('PauseOnExit')) {
+    $PauseOnExit = $true
+}
 $mutating = $Action -in @('Install','Reinstall','Repair','Uninstall')
 if ($Action -eq 'Reinstall' -and $NonInteractive -and -not $ForceReinstall) { throw 'Non-interactive reinstall requires -ForceReinstall.' }
 if ($mutating -and -not (Test-Administrator)) { Invoke-SelfElevation }
@@ -293,6 +308,7 @@ try {
     Remove-WwtOperationCaches
     Write-Progress -Activity "Win11 Window Tiling - $Action" -Completed
     Write-Host "Complete. State and local logs: $($paths.ProductRoot)" -ForegroundColor Green
+    if ($PauseOnExit) { Wait-WwtInstallerExit }
 }
 catch {
     Write-WwtLog -RepositoryRoot $RepositoryRoot -Event 'operation-failed' -Level Error -Data @{ operationId=$operationId; action=$Action; stage=$script:stage; message=$_.Exception.Message }
@@ -315,9 +331,6 @@ catch {
         catch { Write-Warning "Could not prune old operation caches: $($_.Exception.Message)" }
     }
     Write-Error "Action '$Action' failed at stage '$script:stage': $($_.Exception.Message)" -ErrorAction Continue
-    if ($PauseOnFailure -and -not $NonInteractive) {
-        Write-Host ''
-        Read-Host 'Press Enter to close this installer window'
-    }
+    if ($PauseOnExit -or $PauseOnFailure) { Wait-WwtInstallerExit }
     exit 1
 }
