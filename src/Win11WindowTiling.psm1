@@ -499,7 +499,7 @@ function Install-WwtMissingDependencies {
         if (-not $ReinstallAll -and $current.capable) { continue }
         if ($component.installStrategy -eq 'winget-stable') {
             if (-not $winget) { throw "WinGet is required to install '$($component.id)'." }
-            $process = Start-Process -FilePath $winget.Source -ArgumentList @('install','--id',$component.packageId,'--exact','--source','winget','--accept-package-agreements','--accept-source-agreements','--disable-interactivity') -Wait -PassThru -NoNewWindow
+            $process = Start-Process -FilePath $winget.Source -ArgumentList @('install','--id',$component.packageId,'--exact','--source','winget','--force','--accept-package-agreements','--accept-source-agreements','--disable-interactivity') -Wait -PassThru -NoNewWindow
             if ($process.ExitCode -notin @(0,-1978335189)) { throw "WinGet failed installing '$($component.id)' with exit $($process.ExitCode)." }
         } elseif ($component.installStrategy -eq 'immutable-msi') {
             $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
@@ -538,6 +538,30 @@ function Uninstall-WwtDependencies {
     for ($index = $components.Count - 1; $index -ge 0; $index--) {
         $component = $components[$index]
         if ($PreserveGuardedDwm -and $component.installStrategy -eq 'guarded-dwm') { continue }
+
+        # Kill the component again immediately before invoking its uninstaller.
+        # This closes helpers that were started after the initial uninstall purge
+        # (for example by a scheduled task or a package background service).
+        $runtimeNames = @($component.commands | ForEach-Object { [IO.Path]::GetFileNameWithoutExtension([string]$_) })
+        switch ([string]$component.id) {
+            'komorebi' { $runtimeNames += @('komorebic-no-console') }
+            'autohotkey' { $runtimeNames += @('AutoHotkey','AutoHotkey32') }
+            'wezterm' { $runtimeNames += @('wezterm-gui','wezterm-mux-server') }
+            'dwmblurglass' { $runtimeNames += @('DWMBlurGlass','DWMBlurGlassHost') }
+        }
+        if ($runtimeNames.Count) {
+            Get-Process -Name ($runtimeNames | Select-Object -Unique) -ErrorAction SilentlyContinue |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+        }
+        $servicePattern = [regex]::Escape([string]$component.id) -replace '\\-','.?'
+        Get-Service -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -match $servicePattern -or $_.DisplayName -match $servicePattern } |
+            ForEach-Object {
+                Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue
+                Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue
+            }
+        Start-Sleep -Milliseconds 200
+
         if ($component.installStrategy -eq 'winget-stable' -and $winget) {
             Start-Process -FilePath $winget.Source -ArgumentList @('uninstall','--id',$component.packageId,'--exact','--silent','--disable-interactivity') -Wait -PassThru -NoNewWindow | Out-Null
         } elseif ($component.id -eq 'yasb' -and $component.productCode) {
