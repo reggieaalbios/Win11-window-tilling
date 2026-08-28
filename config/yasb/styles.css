@@ -1,0 +1,996 @@
+* {
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 10px;
+  font-weight: 500;
+  color: #e8f7ff;
+  margin: 0;
+  padding: 0;
+}
+
+.yasb-bar {
+  background-color: rgba(2, 10, 25, 0.62);
+  border: none;
+  border-radius: 3px;
+}
+
+.container-left,
+.container-center,
+.container-right {
+  background: transparent;
+}
+
+.workspace-grouper .container {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.widget {
+  background: transparent;
+  padding: 0 7px;
+  border: none;
+}
+
+.widget .label,
+.widget .icon {
+  padding: 0;
+}
+
+.widget .label span,
+.volume-widget .label span,
+.power-menu-widget .label,
+.systray .button {
+  font-family: "Segoe Fluent Icons";
+}
+
+.windows-icon-widget {
+  min-width: 21px;
+  max-width: 21px;
+  min-height: 21px;
+  max-height: 21px;
+  margin: 2px 0;
+  padding: 0;
+  background-color: rgba(55, 128, 168, 0.16);
+  border: none;
+  border-radius: 4px;
+}
+
+.windows-icon-widget .label {
+  padding: 0 4px;
+}
+
+.komorebi-workspaces {
+  padding: 0;
+  background-color: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.komorebi-workspaces .ws-btn {
+  min-width: 17px;
+  min-height: 21px;
+  max-height: 21px;
+  margin: 2px 3px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 4px;
+  background-color: rgba(29, 61, 99, 0.34);
+  color: #a8c7d8;
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.komorebi-workspaces .ws-btn .label {
+  padding: 0 3px;
+}
+
+.komorebi-workspaces .ws-btn .icon {
+  padding: 0 2px;
+  background-color: transparent;
+}
+
+.komorebi-workspaces .ws-btn:hover {
+  color: #ffffff;
+  background-color: rgba(69, 139, 176, 0.24);
+}
+
+.komorebi-workspaces .ws-btn.populated {
+  color: #e0f1fa;
+  background-color: rgba(29, 61, 99, 0.34);
+}
+
+.komorebi-workspaces .ws-btn.active {
+  color: #ffffff;
+  background-color: rgba(43, 116, 174, 0.78);
+  border: 1px solid #309ff5;
+  font-weight: 700;
+}
+
+.komorebi-workspaces .ws-btn.active .label {
+  border-bottom: 3px solid #24a7ff;
+}
+
+.komorebi-workspaces .ws-btn.button-6,
+.komorebi-workspaces .ws-btn.button-7,
+.komorebi-workspaces .ws-btn.button-8,
+.komorebi-workspaces .ws-btn.button-9 {
+  min-width: 0;
+  max-width: 0;
+  min-height: 0;
+  max-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  font-size: 0;
+}
+
+.clock-widget {
+  color: #dbeaf2;
+  font-weight: 500;
+  padding-left: 5px;
+  padding-right: 5px;
+}
+
+.datetime-grouper .container {
+  min-height: 20px;
+  max-height: 20px;
+  margin: 2px 0;
+  padding: 0 8px;
+  background-color: rgba(3, 18, 37, 0.72);
+  border: 1px solid #245675;
+  border-radius: 10px;
+}
+
+.datetime-grouper .clock-widget {
+  padding: 0 3px;
+}
+
+.datetime-grouper .clock-widget + .clock-widget {
+  padding-left: 2px;
+  padding-right: 3px;
+}
+
+.container-center .clock-widget + .clock-widget {
+  color: #f4fbff;
+  padding-left: 4px;
+}
+
+.cpu-widget,
+.memory-widget,
+.traffic-widget,
+.volume-widget,
+.wallpapers-widget,
+.systray {
+  color: #c7dce7;
+}
+
+.cpu-widget,
+.memory-widget,
+.traffic-widget,
+.volume-widget {
+  min-height: 20px;
+  margin: 3px 0;
+  padding: 0 8px;
+  border-radius: 6px;
+}
+
+.cpu-widget:hover,
+.memory-widget:hover,
+.traffic-widget:hover,
+.volume-widget:hover {
+  color: #f4fbff;
+  background-color: rgba(78, 151, 190, 0.11);
+}
+
+.cpu-widget .label,
+.memory-widget .label,
+.traffic-widget .label,
+.volume-widget .label,
+.power-menu-widget .label,
+.windows-icon-widget .label,
+.systray .button {
+  qproperty-alignment: AlignCenter;
+}
+
+.cpu-widget .label span,
+.memory-widget .label span {
+  font-family: "Segoe UI Symbol", "Segoe UI";
+  color: #78b9d8;
+  font-size: 12px;
+}
+
+.systray .button,
+.power-menu-widget .label {
+  font-family: "Segoe UI Symbol", "Segoe UI";
+  color: #78b9d8;
+  font-weight: 400;
+}
+
+.systray .button {
+  min-width: 16px;
+  min-height: 16px;
+  padding: 0 3px 2px 3px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  font-family: "Segoe UI Symbol", "Segoe UI";
+  font-size: 14px;
+  font-weight: 300;
+}
+
+.systray .unpinned-visibility-btn,
+.systray .unpinned-visibility-btn:checked,
+.systray .unpinned-visibility-btn:hover {
+  min-width: 16px;
+  max-width: 16px;
+  min-height: 16px;
+  max-height: 16px;
+  padding: 0 3px 2px 3px;
+  background: transparent;
+  border: none;
+  outline: none;
+  border-radius: 0;
+  color: #78b9d8;
+  font-family: "Segoe UI Symbol", "Segoe UI";
+  font-size: 14px;
+  font-weight: 300;
+}
+
+.memory-widget,
+.traffic-widget,
+.volume-widget,
+.wallpapers-widget,
+.systray,
+.power-menu-widget {
+  border-left: 1px solid #142b3a;
+}
+
+.volume-widget .label span,
+.wallpapers-widget .label span,
+.power-menu-widget .label {
+  color: #78b9d8;
+}
+
+.wallpapers-widget {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.wallpapers-widget .label {
+  font-family: "Segoe UI Symbol", "Segoe UI";
+  font-size: 15px;
+  color: #78b9d8;
+}
+
+.wallpapers-widget:hover {
+  background-color: rgba(69, 139, 176, 0.16);
+  border-radius: 7px;
+}
+
+/* Keep the wallpaper widget alive for its hotkey, but remove its bar icon. */
+.wallpapers-widget,
+.wallpapers-widget .widget-container,
+.wallpapers-widget .label {
+  min-width: 0;
+  max-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.cava-widget.audio-flow {
+  margin: 0 4px 0 7px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.cava-widget.audio-flow .widget-container {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+}
+
+.wallpapers-gallery-window,
+.dark.wallpapers-gallery-window {
+  background-color: rgba(2, 10, 25, 0.62);
+  border: none;
+  border-radius: 10px;
+  margin: 0;
+  padding: 14px;
+}
+
+.wallpapers-gallery-image {
+  border: 3px solid #142d40;
+  border-radius: 8px;
+}
+
+.wallpapers-gallery-image:hover {
+  border: 3px solid #639db9;
+}
+
+.wallpapers-gallery-image.focused {
+  border: 3px solid #78b9d8;
+}
+
+.wallpapers-gallery-buttons {
+  min-width: 160px;
+  padding: 7px 18px;
+  margin: 2px 6px 10px 6px;
+  color: #dff5ff;
+  background-color: rgba(43, 116, 174, 0.44);
+  border: 1px solid #315c76;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.wallpapers-gallery-buttons:hover {
+  color: #ffffff;
+  background-color: rgba(43, 116, 174, 0.72);
+  border-color: #588ba5;
+}
+
+.power-menu-widget {
+  padding-left: 8px;
+  padding-right: 10px;
+}
+
+.power-menu-widget .label {
+  font-size: 13px;
+}
+
+.systray-popup,
+.audio-menu,
+.cpu-popup,
+.memory-popup,
+.traffic-menu {
+  background-color: rgba(4, 15, 29, 0.96);
+  border: 1px solid #23485d;
+  border-radius: 12px;
+  color: #dcecf4;
+}
+
+.cpu-popup,
+.memory-popup {
+  min-width: 330px;
+}
+
+.cpu-popup .header,
+.memory-popup .header {
+  padding: 10px 13px 7px 13px;
+  background: transparent;
+  border-bottom: 1px solid #182f3e;
+}
+
+.cpu-popup .header .text,
+.memory-popup .header .text,
+.traffic-menu .header .title {
+  color: #f3fbff;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.cpu-popup .header .pin-btn,
+.memory-popup .header .pin-btn {
+  min-width: 24px;
+  min-height: 24px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #79bcd9;
+  font-family: "Segoe Fluent Icons";
+  font-size: 12px;
+}
+
+.cpu-popup .header .pin-btn:hover,
+.memory-popup .header .pin-btn:hover,
+.cpu-popup .header .pin-btn.pinned,
+.memory-popup .header .pin-btn.pinned {
+  color: #ffffff;
+  background-color: rgba(74, 155, 198, 0.16);
+}
+
+.cpu-popup .graph-container,
+.memory-popup .graph-container {
+  min-height: 66px;
+  background: transparent;
+}
+
+.cpu-popup .cpu-graph,
+.memory-popup .memory-graph {
+  color: #45baff;
+}
+
+.cpu-popup .cpu-graph-grid,
+.memory-popup .memory-graph-grid {
+  color: rgba(112, 190, 224, 0.08);
+}
+
+.cpu-popup .graph-title,
+.memory-popup .graph-title {
+  padding: 5px 0 3px 12px;
+  color: #7997a7;
+  font-size: 10px;
+}
+
+.cpu-popup .stats,
+.memory-popup .stats {
+  padding: 7px;
+  background: transparent;
+}
+
+.cpu-popup .stats .stat-item,
+.memory-popup .stats .stat-item {
+  margin: 3px;
+  padding: 6px 8px;
+  background-color: rgba(75, 139, 172, 0.07);
+  border: 1px solid #193246;
+  border-radius: 7px;
+}
+
+.cpu-popup .stats .stat-label,
+.memory-popup .stats .stat-label {
+  padding: 2px 2px 1px 2px;
+  color: #829ead;
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.cpu-popup .stats .stat-value,
+.memory-popup .stats .stat-value {
+  padding: 0 2px 4px 2px;
+  color: #eaf8ff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.traffic-menu {
+  min-width: 280px;
+}
+
+.traffic-menu .header {
+  padding: 8px 10px;
+  background: transparent;
+  border-bottom: 1px solid #182f3e;
+}
+
+.traffic-menu .header .reset-button {
+  padding: 3px 7px;
+  color: #7ea9bd;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  font-size: 9px;
+}
+
+.traffic-menu .header .reset-button:hover {
+  color: #effaff;
+  background-color: rgba(74, 155, 198, 0.14);
+}
+
+.traffic-menu .download-speed,
+.traffic-menu .upload-speed {
+  margin: 10px 10px 3px 10px;
+  padding: 5px 8px 7px 8px;
+  background-color: rgba(75, 139, 172, 0.06);
+  border: 1px solid #183044;
+  border-radius: 7px;
+}
+
+.traffic-menu .upload-speed-value,
+.traffic-menu .download-speed-value {
+  color: #eaf8ff;
+  font-size: 18px;
+  font-weight: 650;
+}
+
+.traffic-menu .upload-speed-unit,
+.traffic-menu .download-speed-unit,
+.traffic-menu .upload-speed-placeholder,
+.traffic-menu .download-speed-placeholder,
+.traffic-menu .section-title,
+.traffic-menu .data-text {
+  color: #819dab;
+  font-size: 9px;
+}
+
+.traffic-menu .session-section,
+.traffic-menu .today-section,
+.traffic-menu .alltime-section {
+  margin: 4px 9px 0 9px;
+  padding: 5px 7px 7px 7px;
+  border-bottom: 1px solid #152b39;
+}
+
+.traffic-menu .data-value {
+  color: #dcecf4;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.traffic-menu .interface-info,
+.traffic-menu .internet-info {
+  padding: 6px;
+  color: #7491a0;
+  font-size: 9px;
+}
+
+.traffic-menu .internet-info.connected {
+  color: #7bd7bb;
+  background-color: rgba(73, 191, 151, 0.07);
+}
+
+.traffic-menu .internet-info.disconnected {
+  color: #ff8e9e;
+  background-color: rgba(255, 95, 119, 0.07);
+}
+
+.audio-menu {
+  min-width: 290px;
+  padding: 10px;
+}
+
+.audio-menu .system-volume-container {
+  padding: 6px 4px 10px 4px;
+}
+
+.audio-menu .system-volume-container .volume-slider,
+.audio-menu .apps-container .app-volume .app-slider {
+  border: none;
+}
+
+.audio-menu .system-volume-container .volume-slider::groove,
+.audio-menu .apps-container .app-volume .app-slider::groove {
+  height: 4px;
+  background-color: rgba(100, 157, 184, 0.18);
+  border-radius: 2px;
+}
+
+.audio-menu .system-volume-container .volume-slider::handle,
+.audio-menu .apps-container .app-volume .app-slider::handle {
+  width: 12px;
+  margin: -4px 0;
+  background-color: #62cfff;
+  border: 2px solid #c7f2ff;
+  border-radius: 6px;
+}
+
+.audio-menu .audio-container .device {
+  margin: 2px 0;
+  padding: 6px 7px;
+  color: #bcd2dd;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 10px;
+}
+
+.audio-menu .audio-container .device:hover {
+  background-color: rgba(74, 155, 198, 0.10);
+}
+
+.audio-menu .audio-container .device.selected {
+  color: #f2fbff;
+  background-color: rgba(74, 155, 198, 0.16);
+}
+
+.audio-menu .toggle-apps {
+  min-width: 24px;
+  min-height: 24px;
+  margin-top: 5px;
+  padding: 0;
+  color: #7fb7ce;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+}
+
+.audio-menu .toggle-apps:hover,
+.audio-menu .toggle-apps.expanded {
+  color: #ffffff;
+  background-color: rgba(74, 155, 198, 0.14);
+}
+
+.audio-menu .apps-container {
+  margin-top: 7px;
+  padding: 7px;
+  background-color: rgba(75, 139, 172, 0.055);
+  border: 1px solid #172e41;
+  border-radius: 8px;
+}
+
+.audio-menu .apps-container .app-volume {
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.audio-menu .apps-container .app-volume:hover {
+  background-color: rgba(74, 155, 198, 0.09);
+}
+
+.power-menu-popup {
+  background-color: rgba(9, 15, 25, 0.90);
+  border: 1px solid #25495d;
+  border-radius: 8px;
+}
+
+.power-menu-popup .button {
+  width: 210px;
+  height: 105px;
+  padding: 0;
+  margin: 3px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background-color: rgba(255, 255, 255, 0.025);
+}
+
+.power-menu-popup .button.hover {
+  background-color: rgba(67, 139, 175, 0.09);
+  border-color: #2d5368;
+}
+
+.power-menu-popup .button .icon {
+  padding-top: 12px;
+  font-family: "Segoe Fluent Icons", "Segoe UI Symbol";
+  font-size: 38px;
+  color: #78b9d8;
+}
+
+.power-menu-popup .button .label {
+  margin-bottom: 12px;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 13px;
+  font-weight: 500;
+  color: #d9dcf2;
+}
+
+.power-menu-popup .button.shutdown .icon { color: #ef5350; }
+.power-menu-popup .button.restart .icon { color: #39b9df; }
+.power-menu-popup .button.signout .icon { color: #c05ad9; }
+.power-menu-popup .button.hibernate .icon { color: #4f7fe8; }
+.power-menu-popup .button.sleep .icon { color: #b9a6cf; }
+.power-menu-popup .button.lock .icon { color: #e1c542; }
+
+.power-menu-popup .button.cancel {
+  min-height: 0;
+  max-height: 0;
+  height: 0;
+  padding: 0;
+  margin: 0;
+  border: none;
+  background-color: transparent;
+}
+
+.power-menu-popup .button.cancel .icon,
+.power-menu-popup .button.cancel .label {
+  color: transparent;
+  font-size: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/* Invisible edge target retained for the Ctrl+Alt+P power-menu shortcut. */
+.power-menu-widget,
+.power-menu-widget .widget-container,
+.power-menu-widget .label {
+  min-width: 6px;
+  max-width: 6px;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+}
+
+/* Visual divider inside the workspace group. */
+.workspace-separator {
+  min-width: 1px;
+  max-width: 1px;
+  min-height: 16px;
+  max-height: 16px;
+  margin: 0 3px 0 6px;
+  padding: 0;
+  border: none;
+  background-color: rgba(104, 157, 202, 0.48);
+  color: transparent;
+  font-size: 0;
+}
+
+/* Keep Quick Launch top-level so its global keybinding remains registered. */
+.quick-launch-widget,
+.quick-launch-widget .widget-container,
+.quick-launch-widget .icon,
+.quick-launch-widget .label {
+  min-width: 0;
+  max-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+}
+
+.quick-launch-popup .container {
+  background-color: rgba(2, 10, 25, 0.62);
+  border: none;
+  border-radius: 11px;
+}
+
+.quick-launch-popup .search {
+  margin: 14px 16px 8px 16px;
+  padding: 7px 11px;
+  background-color: rgba(12, 36, 58, 0.36);
+  border: 1px solid #3e718b;
+  border-radius: 6px;
+}
+
+.quick-launch-popup .search .loader-line {
+  color: #55b9ff;
+}
+
+.quick-launch-popup .search .search-icon,
+.quick-launch-popup .search .search-submit-icon {
+  min-width: 18px;
+  color: #d7ecf8;
+  font-family: "Segoe Fluent Icons";
+  font-size: 16px;
+}
+
+.quick-launch-popup .search .search-icon {
+  padding-right: 8px;
+}
+
+.quick-launch-popup .search .search-submit-icon {
+  min-width: 0;
+  max-width: 0;
+  padding: 0;
+  color: transparent;
+  font-size: 0;
+}
+
+.quick-launch-popup .search .search-input {
+  padding: 3px 0;
+  color: #eef9ff;
+  background: transparent;
+  border: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 14px;
+  font-weight: 400;
+}
+
+.quick-launch-popup .search .prefix {
+  margin-right: 6px;
+  padding: 2px 8px;
+  color: #ffffff;
+  background-color: rgba(43, 116, 174, 0.92);
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.quick-launch-popup .results {
+  padding: 3px 11px 13px 11px;
+  background: transparent;
+}
+
+.quick-launch-popup .results-list-view {
+  color: #f2f9fd;
+  background: transparent;
+  border: none;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 13px;
+  font-weight: 500;
+  outline: none;
+}
+
+.quick-launch-popup .results-list-view QScrollBar:vertical {
+  width: 0;
+  margin: 0;
+  background: transparent;
+}
+
+.quick-launch-popup .results-list-view QScrollBar::handle:vertical,
+.quick-launch-popup .results-list-view QScrollBar::add-line:vertical,
+.quick-launch-popup .results-list-view QScrollBar::sub-line:vertical {
+  width: 0;
+  min-height: 0;
+  background: transparent;
+  border: none;
+}
+
+/* The scrollbar is attached to the popup scroll area, not the list viewport. */
+.quick-launch-popup QScrollBar:vertical {
+  min-width: 0;
+  max-width: 0;
+  width: 0;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.quick-launch-popup QScrollBar::handle:vertical,
+.quick-launch-popup QScrollBar::add-line:vertical,
+.quick-launch-popup QScrollBar::sub-line:vertical,
+.quick-launch-popup QScrollBar::add-page:vertical,
+.quick-launch-popup QScrollBar::sub-page:vertical {
+  min-width: 0;
+  max-width: 0;
+  width: 0;
+  background: transparent;
+  border: none;
+}
+
+.quick-launch-popup .results-list-view .description {
+  color: rgba(205, 225, 236, 0.68);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.quick-launch-popup .results-list-view .separator {
+  padding: 5px 0 5px 12px;
+  color: #83a9bc;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.quick-launch-popup .results-list-view::item {
+  margin: 2px 3px;
+  padding: 7px 9px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.quick-launch-popup .results-list-view::item:hover {
+  background-color: rgba(50, 119, 177, 0.34);
+  border-color: #26485b;
+}
+
+.quick-launch-popup .results-list-view::item:selected {
+  background-color: rgba(54, 126, 207, 0.76);
+  border-color: #487a9b;
+}
+
+.quick-launch-popup .results-empty-text {
+  padding-top: 18px;
+  color: #9fb8c6;
+  font-size: 18px;
+}
+
+/* Native YASB shortcut guide. The widget stays mounted only to own Caps+H's
+   internal YASB keybinding; it does not consume space on the bar. */
+.whkd-widget,
+.whkd-widget .widget-container,
+.whkd-widget .label,
+.whkd-widget .icon {
+  min-width: 0;
+  max-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: transparent;
+  font-size: 0;
+}
+
+.whkd-popup {
+  background-color: rgba(2, 10, 25, 0.62);
+  border: 1px solid #294454;
+  border-radius: 11px;
+  color: #dff5ff;
+}
+
+.whkd-popup .filter-input {
+  min-height: 32px;
+  margin: 10px 8px 14px 8px;
+  padding: 6px 10px;
+  color: #eef9ff;
+  background-color: rgba(12, 36, 58, 0.36);
+  border: 1px solid #3e718b;
+  border-radius: 7px;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 12px;
+}
+
+.whkd-popup .keybind-header {
+  margin: 12px 4px 7px 4px;
+  padding: 7px 10px;
+  color: #70b7d7;
+  background-color: rgba(35, 75, 98, 0.18);
+  border: none;
+  border-radius: 7px;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.whkd-popup .keybind-row {
+  margin: 2px 4px;
+  background-color: rgba(16, 29, 42, 0.58);
+  border: 1px solid rgba(63, 113, 137, 0.30);
+  border-radius: 8px;
+}
+
+.whkd-popup .keybind-row:hover {
+  background-color: rgba(50, 119, 177, 0.22);
+  border-color: #315f78;
+}
+
+.whkd-popup .keybind-buttons-container {
+  min-width: 350px;
+  background: transparent;
+}
+
+.whkd-popup .keybind-button {
+  min-width: 34px;
+  padding: 2px 8px;
+  color: #dff5ff;
+  background-color: rgba(22, 54, 77, 0.78);
+  border: 1px solid #4fa7d0;
+  border-radius: 6px;
+  font-family: "Cascadia Mono", "Consolas";
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.whkd-popup .keybind-button.special {
+  color: #67d5ff;
+  background-color: rgba(43, 116, 174, 0.48);
+}
+
+.whkd-popup .plus-separator {
+  min-width: 18px;
+  padding: 0;
+  color: #27bdf3;
+  background: transparent;
+  border: none;
+  font-size: 12px;
+}
+
+.whkd-popup .keybind-command {
+  padding-left: 18px;
+  color: #d4e3ea;
+  font-family: "Segoe UI Variable Text", "Segoe UI";
+  font-size: 12px;
+}
+
+.whkd-popup .edit-config-button {
+  min-height: 0;
+  max-height: 0;
+  margin: 0;
+  padding: 0;
+  color: transparent;
+  background: transparent;
+  border: none;
+  font-size: 0;
+}
+
+/* Independent shortcut guide built on YASB's native PopupWidget. */
+.shortcut-guide-widget,
+.shortcut-guide-widget .widget-container,
+.shortcut-guide-widget .label { min-width: 0; max-width: 0; margin: 0; padding: 0; border: 0; font-size: 0; }
+.shortcut-guide-popup { background-color: rgba(2, 10, 25, 0.62); border: 1px solid #294454; border-radius: 11px; color: #dff5ff; }
+.shortcut-guide-popup .shortcut-search { min-height: 29px; padding: 4px 7px; color: #eef9ff; background-color: rgba(12, 36, 58, 0.36); border: 1px solid #3e718b; border-radius: 7px; font: 11px "Segoe UI Variable Text"; }
+.shortcut-guide-popup .shortcut-scroll,
+.shortcut-guide-popup .shortcut-contents { background: transparent; border: none; }
+.shortcut-guide-popup .shortcut-section { margin-top: 4px; padding: 4px 6px; color: #70b7d7; background-color: rgba(35, 75, 98, 0.18); border-radius: 6px; font: 600 12px "Segoe UI Variable Text"; }
+.shortcut-guide-popup .shortcut-row { min-height: 31px; margin-bottom: 2px; background-color: rgba(16, 29, 42, 0.58); border: 1px solid rgba(63, 113, 137, 0.30); border-radius: 7px; }
+.shortcut-guide-popup .shortcut-row:hover { background-color: rgba(50, 119, 177, 0.22); border-color: #315f78; }
+.shortcut-guide-popup .shortcut-keys { background: transparent; border: none; }
+.shortcut-guide-popup .shortcut-key { min-width: 26px; padding: 2px 5px; color: #dff5ff; background-color: rgba(22, 54, 77, 0.78); border: 1px solid #4fa7d0; border-radius: 5px; font: 600 11px "Cascadia Mono"; }
+.shortcut-guide-popup .shortcut-key.special { color: #67d5ff; background-color: rgba(43, 116, 174, 0.48); }
+.shortcut-guide-popup .shortcut-plus { color: #27bdf3; background: transparent; border: none; font-size: 11px; }
+.shortcut-guide-popup .shortcut-description { padding-left: 5px; color: #d4e3ea; background: transparent; font: 12px "Segoe UI Variable Text"; }

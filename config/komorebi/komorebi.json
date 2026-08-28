@@ -1,0 +1,49 @@
+{
+  "$schema": "https://raw.githubusercontent.com/LGUG2Z/komorebi/v0.1.41/schema.json",
+  "app_specific_configuration_path": "$Env:KOMOREBI_CONFIG_HOME/applications.json",
+  "window_hiding_behaviour": "Cloak",
+  "cross_monitor_move_behaviour": "Insert",
+  "global_work_area_offset": { "left": 7, "top": -1, "right": 14, "bottom": 7 },
+  "default_workspace_padding": 0,
+  "default_container_padding": 2,
+  "resize_delta": 120,
+  "mouse_follows_focus": false,
+  "toggle_float_placement": "Center",
+  "float_rule_placement": "Center",
+  "floating_layer_placement": "Center",
+  "border": true,
+  "border_implementation": "Komorebi",
+  "border_width": 2,
+  "border_offset": -1,
+  "border_style": "Rounded",
+  "border_colours": {
+    "single": "#72ddff", "stack": "#72ddff", "monocle": "#72ddff",
+    "floating": "#72ddff", "unfocused": "#315f78", "unfocused_locked": "#426d83"
+  },
+  "stackbar": { "mode": "Never" },
+  "animation": {
+    "enabled": { "movement": false, "transparency": false },
+    "duration": { "movement": 180, "transparency": 180 },
+    "style": { "movement": "EaseOutSine", "transparency": "EaseOutSine" },
+    "fps": 60
+  },
+  "transparency": false,
+  "transparency_alpha": 242,
+  "ignore_rules": [
+    { "kind": "Class", "id": "AutoHotkey", "matching_strategy": "Equals" },
+    { "kind": "Title", "id": "Picture in picture", "matching_strategy": "Contains" },
+    { "kind": "Title", "id": "Picture-in-Picture", "matching_strategy": "Contains" },
+    [{ "kind": "Exe", "id": "PowerToys.exe", "matching_strategy": "Equals" }, { "kind": "Class", "id": "HwndWrapper[PowerToys.PowerAccent", "matching_strategy": "StartsWith" }],
+    [{ "kind": "Title", "id": "Command Palette", "matching_strategy": "Equals" }, { "kind": "Class", "id": "WinUIDesktopWin32WindowClass", "matching_strategy": "Equals" }],
+    [{ "kind": "Exe", "id": "PowerToys.exe", "matching_strategy": "Equals" }, { "kind": "Title", "id": " - Peek", "matching_strategy": "EndsWith" }],
+    [{ "kind": "Exe", "id": "Lively.exe", "matching_strategy": "Equals" }, { "kind": "Class", "id": "HwndWrapper", "matching_strategy": "StartsWith" }],
+    [{ "kind": "Exe", "id": "EXCEL.EXE", "matching_strategy": "Equals" }, { "kind": "Class", "id": "XLMAIN", "matching_strategy": "DoesNotEqual" }],
+    [{ "kind": "Exe", "id": "WINWORD.EXE", "matching_strategy": "Equals" }, { "kind": "Class", "id": "OpusApp", "matching_strategy": "DoesNotEqual" }],
+    [{ "kind": "Exe", "id": "POWERPNT.EXE", "matching_strategy": "Equals" }, { "kind": "Class", "id": "PPTFrameClass", "matching_strategy": "DoesNotEqual" }]
+  ],
+  "monitors": [{ "workspaces": [
+    { "name": "1", "layout": "BSP" }, { "name": "2", "layout": "BSP" },
+    { "name": "3", "layout": "BSP" }, { "name": "4", "layout": "BSP" },
+    { "name": "5", "layout": "BSP" }
+  ] }]
+}

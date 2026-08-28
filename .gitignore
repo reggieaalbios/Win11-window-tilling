@@ -1,0 +1,4 @@
+.staging/
+installer/Output/
+__pycache__/
+*.pyc

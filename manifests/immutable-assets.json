@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "purpose": "Immutable exceptions only. Ordinary packages resolve to current stable versions at install time.",
+  "assets": [
+    {
+      "component": "yasb", "version": "2.0.6-wwt.1", "file": "yasb-2.0.6-wwt-x64.msi",
+      "url": "https://github.com/reggieaalbios/Win11-window-tilling-dependencies/releases/download/yasb-2.0.6-wwt.1/yasb-2.0.6-wwt-x64.msi",
+      "sha256": "6EB70C36B2E3A185449FCADC58E7138EF9D74869EC6219DE55457FB1F8D3DFD6",
+      "sourceRevision": "amnweb/yasb@v2.0.6",
+      "overlayHashes": {
+        "shortcut_guide.py": "495C30071B278D416A68CE430046C2C71450669D5075EA2881FA5F795E0DD47E",
+        "shortcut_guide_validation.py": "96999FB2DB70D9CD3AC136ED86E04E99E90AEDC92F9ECF78767C8F899412CE2A"
+      }
+    },
+    {
+      "component": "dwmblurglass", "version": "2.3.2b3", "windowsBuildRange": "22000-29999",
+      "file": "DWMBlurGlass.2.3.2_Beta3_x64.zip",
+      "url": "https://github.com/Maplespe/DWMBlurGlass/releases/download/2.3.2b3/DWMBlurGlass.2.3.2_Beta3_x64.zip",
+      "sha256": "32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51"
+    }
+  ]
+}

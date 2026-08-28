@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "wallpaper": null,
+  "wallpaperHash": null,
+  "generatedAt": "static-safe-theme",
+  "mode": "dark",
+  "fallback": true,
+  "opacity": {
+    "bar": 0.78,
+    "popup": 0.9
+  },
+  "source": {
+    "medianLuminance": 0.1,
+    "sampleCount": 0,
+    "clusterCount": 0
+  },
+  "roles": {
+    "background": "#020A19",
+    "surface": "#101D2A",
+    "surfaceAlt": "#182A3A",
+    "text": "#F2F9FD",
+    "textMuted": "#B7CCD8",
+    "border": "#4FA7D0",
+    "accent": "#45BAFF",
+    "accentSoft": "#315F78",
+    "hover": "#244A61",
+    "active": "#2674AE",
+    "focus": "#72DDFF",
+    "selectedText": "#06101A",
+    "success": "#55D6A9",
+    "warning": "#F1C75B",
+    "error": "#FF6B7A",
+    "cava1": "#70E7FF",
+    "cava2": "#45BAFF",
+    "cava3": "#5A8CFF"
+  },
+  "contrastResults": [
+    { "name": "text/background", "ratio": 18.15, "minimum": 4.5 },
+    { "name": "muted/background", "ratio": 11.75, "minimum": 4.5 },
+    { "name": "accent/background", "ratio": 8.78, "minimum": 3.0 },
+    { "name": "border/background", "ratio": 7.23, "minimum": 3.0 },
+    { "name": "selectedText/accent", "ratio": 8.01, "minimum": 4.5 }
+  ]
+}

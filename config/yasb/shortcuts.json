@@ -1,0 +1,57 @@
+{
+  "sections": [
+    {"title":"Essentials","items":[
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","H"],"description":"Keyboard shortcut help"},
+      {"keys":["Caps","Enter"],"description":"Open terminal"},
+      {"keys":["Caps","Shift","Enter"],"description":"Toggle dropdown terminal"},
+      {"keys":["Caps","D"],"description":"Open quick app launcher"},
+      {"keys":["Caps","W"],"description":"Open wallpaper selector"},
+      {"keys":["Ctrl","Alt","P"],"description":"Open power menu"},
+      {"keys":["Alt","Tab"],"description":"Cycle apps in the current workspace"}
+    ]},
+    {"title":"Focus and Windows","items":[
+      {"keys":["Caps","Left"],"description":"Focus left"},
+      {"keys":["Caps","J / Down"],"description":"Focus down"},
+      {"keys":["Caps","K / Up"],"description":"Focus up"},
+      {"keys":["Caps","L / Right"],"description":"Focus right"},
+      {"keys":["Caps","Space"],"description":"Cycle focus"},
+      {"keys":["Caps","Q"],"description":"Close window"},
+      {"keys":["Caps","Shift","M"],"description":"Minimize window"}
+    ]},
+    {"title":"Move and Resize","items":[
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Left drag"],"description":"Move or rearrange a managed window"},
+      {"keys":["Caps","Alt","H / J / K / L"],"description":"Move window"},
+      {"keys":["Caps","Shift","H / J / K / L"],"description":"Resize window"},
+      {"keys":["Caps","U / P"],"description":"Decrease or increase width"},
+      {"keys":["Caps","I / O"],"description":"Decrease or increase height"},
+      {"keys":["Caps","R"],"description":"Enter resize mode"}
+    ]},
+    {"title":"Apps and Dropdowns","items":[
+      {"keys":["Caps","E"],"description":"Open File Explorer"},
+      {"keys":["Caps","B"],"description":"Open browser"},
+      {"keys":["Caps","Shift","E"],"description":"Toggle dropdown Explorer"},
+      {"keys":["Caps","Shift","R"],"description":"Toggle dropdown Notes"}
+    ]},
+    {"title":"Layouts","items":[
+      {"keys":["Caps","T"],"description":"Next layout"},
+      {"keys":["Caps","V"],"description":"Toggle floating"},
+      {"keys":["Caps","Ctrl","F"],"description":"Toggle monocle"},
+      {"keys":["Caps","Shift","W"],"description":"Retile workspace"},
+      {"keys":["Caps","Shift","P"],"description":"Pause Komorebi"},
+      {"keys":["Caps","Shift","F"],"description":"Toggle fullscreen"}
+    ]},
+    {"title":"Workspaces and Monitors","items":[
+      {"keys":["Caps","1–5"],"description":"Focus workspace"},
+      {"keys":["Caps","Shift","1–5"],"description":"Move window and follow"},
+      {"keys":["Caps","A / S"],"description":"Previous or next workspace"},
+      {"keys":["Caps","Shift","A / D"],"description":"Move window to another monitor"},
+      {"keys":["Caps","Ctrl","Arrows"],"description":"Move window to next monitor"}
+    ]},
+    {"title":"System","items":[
+      {"keys":["Caps","Shift","S"],"description":"Open screen snip"},
+      {"keys":["Caps","Print Screen"],"description":"Capture full screenshot"},
+      {"keys":["Caps","Ctrl","T"],"description":"Toggle Windows taskbar"},
+      {"keys":["Caps","M"],"description":"Exit Komorebi"}
+    ]}
+  ]
+}

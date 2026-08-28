@@ -1,0 +1,80 @@
+{
+  "schemaVersion": 2,
+  "productChannel": "dev",
+  "releaseReady": false,
+  "dependencyPolicy": {
+    "ordinaryPackages": "skip-capable-or-install-latest-stable",
+    "automaticUpgrades": false,
+    "allowPrerelease": false,
+    "immutableExceptions": ["yasb", "dwmblurglass"]
+  },
+  "platform": { "minimumBuild": 22000, "architecture": "x64", "requiresAdministrator": true },
+  "components": [
+    {
+      "id": "komorebi", "required": true, "installStrategy": "winget-stable", "packageId": "LGUG2Z.komorebi",
+      "commands": ["komorebic.exe", "komorebi.exe"], "detectionPaths": ["%ProgramFiles%\\komorebi\\bin\\komorebic.exe"],
+      "minimumCapability": "stable Windows 11 x64 build with komorebic state support", "healthCheck": "komorebic state",
+      "versionCommand": { "arguments": ["--version"], "pattern": "([0-9]+\\.[0-9]+\\.[0-9]+)" }
+    },
+    {
+      "id": "yasb", "required": true, "installStrategy": "immutable-msi",
+      "commands": ["yasb.exe", "yasbc.exe"], "detectionPaths": ["%ProgramFiles%\\YASB\\yasb.exe"],
+      "minimumCapability": "WWT native shortcut and popup coordination patch",
+      "requiredFingerprint": "9E0501B42E04EC40BC9C93190B9FCA1554FD30CA732F6A0B040228D55D026380",
+      "productCode": "{296D7608-4CA0-4DEF-8802-46BF1B9D7A19}",
+      "asset": {
+        "repository": "reggieaalbios/Win11-window-tilling-dependencies", "version": "yasb-2.0.6-wwt.1",
+        "file": "yasb-2.0.6-wwt-x64.msi",
+        "url": "https://github.com/reggieaalbios/Win11-window-tilling-dependencies/releases/download/yasb-2.0.6-wwt.1/yasb-2.0.6-wwt-x64.msi",
+        "sha256": "6EB70C36B2E3A185449FCADC58E7138EF9D74869EC6219DE55457FB1F8D3DFD6",
+        "sourceRevision": "amnweb/yasb@v2.0.6"
+      }
+    },
+    {
+      "id": "autohotkey", "required": true, "installStrategy": "winget-stable", "packageId": "AutoHotkey.AutoHotkey",
+      "commands": ["AutoHotkey64.exe"], "detectionPaths": ["%LOCALAPPDATA%\\Programs\\AutoHotkey\\v2\\AutoHotkey64.exe"],
+      "minimumCapability": "major version 2", "healthCheck": "v2 executable path and version",
+      "versionCommand": { "arguments": ["/ErrorStdOut", "*"], "pattern": "v(2\\.[0-9.]+)" }
+    },
+    {
+      "id": "wezterm", "required": true, "installStrategy": "winget-stable", "packageId": "wez.wezterm",
+      "commands": ["wezterm.exe"], "detectionPaths": ["%ProgramFiles%\\WezTerm\\wezterm.exe"],
+      "minimumCapability": "stable Windows build", "healthCheck": "wezterm --version",
+      "versionCommand": { "arguments": ["--version"], "pattern": "wezterm ([^ ]+)" }
+    },
+    {
+      "id": "oh-my-posh", "required": true, "installStrategy": "winget-stable", "packageId": "JanDeDobbeleer.OhMyPosh",
+      "commands": ["oh-my-posh.exe"], "detectionPaths": ["%LOCALAPPDATA%\\Programs\\oh-my-posh\\bin\\oh-my-posh.exe"],
+      "minimumCapability": "stable PowerShell init", "healthCheck": "oh-my-posh version",
+      "versionCommand": { "arguments": ["version"], "pattern": "([0-9]+\\.[0-9]+\\.[0-9]+)" }
+    },
+    {
+      "id": "zoxide", "required": true, "installStrategy": "winget-stable", "packageId": "ajeetdsouza.zoxide",
+      "commands": ["zoxide.exe"], "detectionPaths": [], "minimumCapability": "PowerShell init", "healthCheck": "zoxide --version",
+      "versionCommand": { "arguments": ["--version"], "pattern": "zoxide ([0-9.]+)" }
+    },
+    {
+      "id": "cava", "required": true, "installStrategy": "winget-stable", "packageId": "karlstav.cava",
+      "commands": ["cava.exe"], "detectionPaths": [], "minimumCapability": "Windows audio capture build", "healthCheck": "cava --version",
+      "versionCommand": { "arguments": ["--version"], "pattern": "([0-9]+\\.[0-9.]+)" }
+    },
+    {
+      "id": "dwmblurglass", "required": true, "installStrategy": "guarded-dwm",
+      "commands": ["DWMBlurGlassGUI.exe"], "detectionPaths": ["%ProgramFiles%\\DWMBlurGlass\\DWMBlurGlassGUI.exe"],
+      "minimumCapability": "tested mapping for current Windows build", "healthCheck": "host injection and rollback state",
+      "compatibility": [{
+        "minimumBuild": 22000, "maximumBuild": 29999, "version": "2.3.2b3", "file": "DWMBlurGlass.2.3.2_Beta3_x64.zip",
+        "url": "https://github.com/Maplespe/DWMBlurGlass/releases/download/2.3.2b3/DWMBlurGlass.2.3.2_Beta3_x64.zip",
+        "sha256": "32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51"
+      }]
+    },
+    {
+      "id": "adaptive-theme-engine", "required": true, "installStrategy": "bundled-config", "commands": [],
+      "detectionPaths": ["%USERPROFILE%\\.config\\theme-engine\\theme-engine.ps1"], "minimumCapability": "safe theme fallback", "healthCheck": "source exists"
+    },
+    {
+      "id": "wallpapers", "required": true, "installStrategy": "bundled-config", "commands": [],
+      "detectionPaths": ["%USERPROFILE%\\Pictures\\Wallpapers\\wwt-mountain-dawn.png"], "minimumCapability": "WWT-owned wallpaper asset", "healthCheck": "asset hash"
+    }
+  ]
+}

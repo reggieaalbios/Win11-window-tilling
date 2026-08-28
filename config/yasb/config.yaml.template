@@ -1,0 +1,426 @@
+watch_stylesheet: true
+watch_config: true
+debug: false
+update_check: false
+show_systray: true
+system_colors: false
+
+komorebi:
+  start_command: '"{{PROGRAM_FILES_WIN}}\komorebi\bin\komorebi.exe" --config "{{USER_PROFILE_WIN}}\.config\komorebi\komorebi.json"'
+  stop_command: '"{{PROGRAM_FILES_WIN}}\komorebi\bin\komorebic.exe" stop'
+  reload_command: '"{{PROGRAM_FILES_WIN}}\komorebi\bin\komorebic.exe" reload-configuration'
+
+bars:
+  primary-bar:
+    enabled: true
+    screens: ["primary"]
+    class_name: "yasb-bar"
+    alignment:
+      position: "top"
+      center: true
+    animation:
+      enabled: false
+      duration: 0
+      type: "slide"
+    blur_effect:
+      enabled: true
+      acrylic: true
+      dark_mode: true
+      round_corners: true
+      border_color: "#416f87"
+    window_flags:
+      always_on_top: true
+      windows_app_bar: true
+      hide_on_fullscreen: true
+      hide_on_maximized: false
+    dimensions:
+      width: "100%"
+      height: 34
+    padding:
+      top: 3
+      left: 7
+      bottom: 3
+      right: 7
+    layouts:
+      left:
+        alignment: "left"
+        stretch: true
+      center:
+        alignment: "center"
+        stretch: false
+      right:
+        alignment: "right"
+        stretch: true
+    widgets:
+      left: ["workspace_group", "quick_launch", "shortcut_guide"]
+      center: ["datetime_group"]
+      right: ["cava", "cpu", "memory", "traffic", "volume", "wallpapers", "power_menu"]
+
+widgets:
+  datetime_group:
+    type: "yasb.grouper.GrouperWidget"
+    options:
+      class_name: "datetime-grouper"
+      widgets: ["date", "clock"]
+      hide_empty: false
+      collapse_options:
+        enabled: false
+
+  workspace_group:
+    type: "yasb.grouper.GrouperWidget"
+    options:
+      class_name: "workspace-grouper"
+      widgets: ["windows_icon", "workspace_separator", "komorebi_workspaces"]
+      hide_empty: false
+      collapse_options:
+        enabled: false
+
+  windows_icon:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/windows-logo.svg" width="13" height="13" style="vertical-align: -2px;">'
+      label_alt: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/windows-logo.svg" width="13" height="13" style="vertical-align: -2px;">'
+      class_name: "windows-icon-widget"
+      tooltip: false
+
+  workspace_separator:
+    type: "yasb.custom.CustomWidget"
+    options:
+      label: ""
+      label_alt: ""
+      class_name: "workspace-separator"
+      tooltip: false
+
+  quick_launch:
+    type: "yasb.shortcut_guide.CoordinatedQuickLaunchWidget"
+    options:
+      label: ""
+      search_placeholder: "Type to search..."
+      remember_last_query: false
+      max_results: 8
+      show_icons: true
+      icon_size: 26
+      home_page: false
+      compact_mode: false
+      compact_text: false
+      providers:
+        apps:
+          enabled: true
+          prefix: "*"
+          priority: 1
+          show_recent: true
+          max_recent: 8
+          show_description: false
+        settings:
+          enabled: true
+          prefix: "@"
+          priority: 2
+      popup:
+        width: 500
+        height: 420
+        blur: true
+        round_corners: true
+        round_corners_type: "normal"
+        border_color: "#294454"
+        dark_mode: true
+      keybindings:
+        - keys: "ctrl+alt+shift+f10"
+          action: "toggle_quick_launch"
+          screen: "active"
+      callbacks:
+        on_left: "toggle_quick_launch"
+
+  shortcut_guide:
+    type: "yasb.shortcut_guide.CoordinatedShortcutGuideWidget"
+    options:
+      label: ""
+      data_path: "{{USER_PROFILE_WIN}}\\.config\\yasb\\shortcuts.json"
+      popup:
+        width: 520
+        height: 430
+        blur: true
+        round_corners: true
+        round_corners_type: "normal"
+        border_color: "#294454"
+        dark_mode: true
+      keybindings:
+        - keys: "ctrl+alt+shift+f9"
+          action: "toggle_shortcut_guide"
+          screen: "active"
+
+  komorebi_workspaces:
+    type: "komorebi.workspaces.WorkspaceWidget"
+    options:
+      label_offline: "Komorebi offline"
+      label_workspace_btn: "{index}"
+      label_workspace_active_btn: "{index}"
+      label_workspace_populated_btn: "{index}"
+      label_default_name: "{index}"
+      label_zero_index: false
+      hide_if_offline: false
+      enable_scroll_switching: true
+      reverse_scroll_direction: false
+      animation: false
+      app_icons:
+        enabled_populated: true
+        enabled_active: true
+        size: 12
+        max_icons: 0
+        hide_label: false
+        hide_duplicates: false
+        hide_floating: true
+
+  komorebi_active_layout:
+    type: "komorebi.active_layout.ActiveLayoutWidget"
+    options:
+      hide_if_offline: false
+      label: "{layout_name}"
+      layouts: ["bsp", "columns", "rows", "grid", "scrolling", "vertical_stack", "horizontal_stack", "ultrawide_vertical_stack", "right_main_vertical_stack"]
+      callbacks:
+        on_left: "toggle_layout_menu"
+        on_middle: "next_layout"
+        on_right: "prev_layout"
+
+  active_window:
+    type: "yasb.active_window.ActiveWindowWidget"
+    options:
+      label: "{win[title]}"
+      label_alt: "{win[app_name]}"
+      label_no_window: "Desktop"
+      label_icon: false
+      max_length: 32
+      max_length_ellipsis: "…"
+      monitor_exclusive: true
+
+  date:
+    type: "yasb.clock.ClockWidget"
+    options:
+      label: "{%a, %b %d}"
+      label_alt: "{%A, %B %d, %Y}"
+      timezones: []
+      callbacks:
+        on_left: "toggle_label"
+
+  clock:
+    type: "yasb.clock.ClockWidget"
+    options:
+      label: "{%I:%M %p}"
+      label_alt: "{%I:%M:%S %p}"
+      timezones: []
+      callbacks:
+        on_left: "toggle_label"
+
+  cpu:
+    type: "yasb.cpu.CpuWidget"
+    options:
+      label: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/cpu-neon.svg" width="13" height="13"></td><td valign="middle">&nbsp;{info[percent][total]}%</td></tr></table>'
+      label_alt: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/cpu-neon.svg" width="13" height="13"></td><td valign="middle">&nbsp;{info[freq][current]} MHz</td></tr></table>'
+      update_interval: 2000
+      hide_decimal: true
+      callbacks:
+        on_left: "toggle_label"
+        on_right: "toggle_menu"
+      menu:
+        enabled: true
+        blur: true
+        round_corners: true
+        round_corners_type: "small"
+        border_color: "#315f78"
+        alignment: "right"
+        direction: "down"
+        offset_top: 7
+        show_graph: true
+        show_graph_grid: true
+        graph_history_size: 60
+
+  memory:
+    type: "yasb.memory.MemoryWidget"
+    options:
+      label: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/ram-neon.svg" width="17" height="12"></td><td valign="middle">&nbsp;{virtual_mem_percent}%</td></tr></table>'
+      label_alt: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/ram-neon.svg" width="17" height="12"></td><td valign="middle">&nbsp;{virtual_mem_used}/{virtual_mem_total}</td></tr></table>'
+      update_interval: 5000
+      hide_decimal: true
+      callbacks:
+        on_left: "toggle_label"
+        on_right: "toggle_menu"
+      menu:
+        enabled: true
+        blur: true
+        round_corners: true
+        round_corners_type: "small"
+        border_color: "#315f78"
+        alignment: "right"
+        direction: "down"
+        offset_top: 7
+        show_graph: true
+        show_graph_grid: true
+        graph_history_size: 60
+
+  traffic:
+    type: "yasb.traffic.TrafficWidget"
+    options:
+      label: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/download-neon.svg" width="11" height="11"></td><td valign="middle">&nbsp;{download_speed}</td><td valign="middle">&nbsp;&nbsp;<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/upload-neon.svg" width="11" height="11"></td><td valign="middle">&nbsp;{upload_speed}</td></tr></table>'
+      label_alt: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle"><img src="{{USER_PROFILE_URI}}/.config/yasb/assets/download-neon.svg" width="11" height="11"></td><td valign="middle">&nbsp;{download_speed}</td><td valign="middle">&nbsp;&nbsp;<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/upload-neon.svg" width="11" height="11"></td><td valign="middle">&nbsp;{upload_speed}</td></tr></table>'
+      update_interval: 2000
+      interface: "Auto"
+      hide_if_offline: false
+      speed_unit: "bytes"
+      hide_decimal: true
+      callbacks:
+        on_left: "toggle_menu"
+        on_right: "toggle_label"
+      menu:
+        blur: true
+        round_corners: true
+        round_corners_type: "small"
+        border_color: "#315f78"
+        alignment: "right"
+        direction: "down"
+        offset_top: 7
+        show_interface_name: true
+        show_internet_info: true
+
+  volume:
+    type: "yasb.volume.VolumeWidget"
+    options:
+      label: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle">{icon}</td><td valign="middle">&nbsp;{level}</td></tr></table>'
+      label_alt: '<table cellspacing="0" cellpadding="0"><tr><td valign="middle">{icon}</td><td valign="middle">&nbsp;{level}</td></tr></table>'
+      scroll_step: 2
+      slider_beep: false
+      mute_text: "mute"
+      icons:
+        muted: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/volume-minimal.svg" width="13" height="13">'
+        "10": '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/volume-minimal.svg" width="13" height="13">'
+        "30": '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/volume-minimal.svg" width="13" height="13">'
+        "60": '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/volume-minimal.svg" width="13" height="13">'
+        "100": '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/volume-minimal.svg" width="13" height="13">'
+      audio_menu:
+        blur: true
+        round_corners: true
+        round_corners_type: "small"
+        border_color: "#315f78"
+        alignment: "right"
+        direction: "down"
+        offset_top: 7
+        show_apps: true
+        show_app_labels: false
+        show_app_icons: true
+      callbacks:
+        on_left: "toggle_volume_menu"
+        on_right: "toggle_mute"
+
+  cava:
+    type: "yasb.cava.CavaWidget"
+    options:
+      class_name: "audio-flow"
+      source: "auto"
+      bar_height: 15
+      min_bar_height: 1
+      bars_number: 18
+      bar_width: 2
+      bar_spacing: 2
+      bar_type: "bars"
+      orientation: "bottom"
+      sensitivity: 125
+      lower_cutoff_freq: 50
+      higher_cutoff_freq: 12000
+      framerate: 60
+      noise_reduction: 72
+      channels: "stereo"
+      mono_option: "average"
+      monstercat: 1
+      waves: 0
+      gradient: 1
+      foreground: "#64ddff"
+      gradient_color_1: "#70e7ff"
+      gradient_color_2: "#45baff"
+      gradient_color_3: "#5a8cff"
+      edge_fade: [4, 4]
+      hide_empty: false
+      callbacks:
+        on_left: "do_nothing"
+        on_middle: "do_nothing"
+        on_right: "reload_cava"
+
+  wallpapers:
+    type: "yasb.shortcut_guide.CoordinatedWallpapersWidget"
+    options:
+      label: ""
+      tooltip: true
+      image_path: "{{WALLPAPER_DIR_YAML}}"
+      change_automatically: false
+      update_interval: 60
+      engine:
+        enabled: true
+        animation: "circle"
+      run_after:
+        - 'powershell.exe -NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{{USER_PROFILE_WIN}}\.config\theme-engine\theme-engine.ps1" -Mode Apply -Image "{image}"'
+      gallery:
+        enabled: true
+        blur: true
+        image_width: 230
+        image_per_page: 12
+        gallery_columns: 4
+        horizontal_position: "center"
+        vertical_position: "center"
+        position_offset: 18
+        respect_work_area: true
+        show_buttons: false
+        orientation: "landscape"
+        image_spacing: 10
+        lazy_load: true
+        lazy_load_fadein: 240
+        image_corner_radius: 8
+      keybindings:
+        - keys: "ctrl+alt+shift+f12"
+          action: "toggle_gallery"
+      callbacks:
+        on_left: "toggle_gallery"
+        on_middle: "do_nothing"
+        on_right: "change_wallpaper"
+
+  systray:
+    type: "yasb.systray.SystrayWidget"
+    options:
+      class_name: "systray"
+      label_collapsed: "∨"
+      label_expanded: "∧"
+      label_position: "left"
+      icon_size: 16
+      pin_click_modifier: "alt"
+      show_unpinned: false
+      show_unpinned_button: true
+      show_in_popup: true
+      icons_per_row: 4
+      show_battery: false
+      show_volume: false
+      show_network: false
+      tooltip: true
+      use_hook: false
+      hide_icons: []
+      popup:
+        alignment: "right"
+        direction: "down"
+
+  power_menu:
+    type: "yasb.shortcut_guide.CoordinatedPowerMenuWidget"
+    options:
+      label: ""
+      uptime: false
+      blur: true
+      blur_background: true
+      animation_duration: 180
+      button_row: 3
+      menu_style: "fullscreen"
+      keybindings:
+        - keys: "ctrl+alt+p"
+          action: "toggle_power_menu"
+          screen: "active"
+      buttons:
+        shutdown: ["\ue7e8", "Shut down"]
+        restart: ["\ue777", "Restart"]
+        signout: ["\ue8ac", "Sign out"]
+        hibernate: ["❄", "Hibernate"]
+        sleep: ["\ue708", "Sleep"]
+        lock: ["\ue72e", "Lock"]
+        cancel: ["", "Cancel"]
