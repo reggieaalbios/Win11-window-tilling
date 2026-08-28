@@ -186,6 +186,10 @@ try {
     Assert ($uninstallText -match 'Press Enter to reboot now') 'Interactive uninstall must offer to reboot when locked cleanup remains.'
     Assert ($uninstallText -match '\$NonInteractive[\s\S]+rerun with -Reboot') 'Non-interactive uninstall must not block on a reboot prompt.'
     Assert ($uninstallText -match 'foreach \(\$target in @\(Get-WwtManagedTargets\)\)') 'A locked managed target must not prevent later targets from being removed.'
+    Assert ($uninstallText -match 'Remove-WwtOrphanedUninstallEntries') 'Uninstall must remove stale Programs and Features records after deleting leftovers.'
+    foreach ($managedProgram in @('\^AutoHotkey\$','\^cava\$','\^komorebi\$','\^YASB Reborn\$','\^zoxide\$')) {
+        Assert ($uninstallText -match $managedProgram) "Orphan cleanup is missing an exact managed-program pattern: $managedProgram"
+    }
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }

@@ -208,6 +208,34 @@ function Remove-WwtDependencyLeftovers {
     }
 }
 
+function Remove-WwtOrphanedUninstallEntries {
+    $uninstallRoots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $managedNames = @(
+        '^AutoHotkey$',
+        '^cava$',
+        '^komorebi$',
+        '^WezTerm(?: version .+)?$',
+        '^YASB Reborn$',
+        '^Oh My Posh$',
+        '^zoxide$'
+    )
+
+    foreach ($root in $uninstallRoots) {
+        foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
+            if (-not $record -or -not $record.DisplayName) { continue }
+            if (-not @($managedNames | Where-Object { $record.DisplayName -match $_ }).Count) { continue }
+            if ($PSCmdlet.ShouldProcess($entry.PSPath,"Remove orphaned uninstall record for $($record.DisplayName)")) {
+                Remove-Item -LiteralPath $entry.PSPath -Recurse -Force
+            }
+        }
+    }
+}
+
 if ($NonInteractive -and -not $Force) {
     throw 'Non-interactive uninstall purge requires -Force.'
 }
@@ -253,6 +281,9 @@ try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Write-
 Write-Host 'Removing leftover dependency directories...' -ForegroundColor Cyan
 Stop-WwtProcesses
 try { Remove-WwtDependencyLeftovers } catch { Add-CleanupWarning $_.Exception.Message }
+
+Write-Host 'Removing orphaned Programs and Features entries...' -ForegroundColor Cyan
+try { Remove-WwtOrphanedUninstallEntries } catch { Add-CleanupWarning $_.Exception.Message }
 
 Write-Host 'Purging product caches, artifacts, backups, runtime, source snapshots, and state...' -ForegroundColor Cyan
 if ($KeepLogs) {
