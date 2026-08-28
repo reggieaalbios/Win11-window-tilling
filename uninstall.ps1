@@ -4,6 +4,7 @@ param(
     [switch]$NonInteractive,
     [switch]$KeepLogs,
     [switch]$RemoveRepositoryCheckout,
+    [switch]$Reboot,
     [switch]$ElevatedRelaunch,
     [string]$LogPath
 )
@@ -58,6 +59,7 @@ function Invoke-SelfElevation {
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($KeepLogs) { $values += '-KeepLogs' }
     if ($RemoveRepositoryCheckout) { $values += '-RemoveRepositoryCheckout' }
+    if ($Reboot) { $values += '-Reboot' }
     $values += @('-ElevatedRelaunch','-LogPath',$elevatedLogPath)
     Write-Host 'Launching elevated uninstall purge for machine-level apps and startup entries...' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
@@ -294,4 +296,21 @@ if ($LogPath) { Write-Host "Uninstall log: $LogPath" -ForegroundColor DarkGray }
 if ($script:TranscriptStarted) {
     Stop-Transcript | Out-Null
     $script:TranscriptStarted = $false
+}
+
+if ($rebootCleanup.Count -gt 0) {
+    if ($Reboot) {
+        Write-Host 'Restarting Windows to finish uninstall cleanup...' -ForegroundColor Yellow
+        Restart-Computer -Force
+    } elseif ($NonInteractive) {
+        Write-Warning 'A reboot is required to finish uninstall cleanup. Reboot manually, or rerun with -Reboot to restart automatically.'
+    } else {
+        Write-Host ''
+        $answer = Read-Host 'A reboot is required to finish uninstall cleanup. Press Enter to reboot now, or type N to reboot later'
+        if ([string]::IsNullOrWhiteSpace($answer)) {
+            Restart-Computer -Force
+        } else {
+            Write-Warning 'Reboot Windows later to finish uninstall cleanup.'
+        }
+    }
 }

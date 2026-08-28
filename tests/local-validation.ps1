@@ -182,6 +182,9 @@ try {
     Assert ($uninstallText -match "New-ScheduledTaskTrigger -AtStartup") 'MoveFileEx failures must fall back to an early-boot cleanup task.'
     Assert ($uninstallText -match "New-ScheduledTaskPrincipal -UserId 'SYSTEM'") 'Early-boot cleanup must run as SYSTEM before user apps can relock files.'
     Assert ($uninstallText -match 'Win11WindowTilling Uninstall Cleanup') 'Early-boot cleanup must use a deterministic self-removing task.'
+    Assert ($uninstallText -match '\[switch\]\$Reboot') 'Unattended uninstall must provide an explicit reboot switch.'
+    Assert ($uninstallText -match 'Press Enter to reboot now') 'Interactive uninstall must offer to reboot when locked cleanup remains.'
+    Assert ($uninstallText -match '\$NonInteractive[\s\S]+rerun with -Reboot') 'Non-interactive uninstall must not block on a reboot prompt.'
     Assert ($uninstallText -match 'foreach \(\$target in @\(Get-WwtManagedTargets\)\)') 'A locked managed target must not prevent later targets from being removed.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
