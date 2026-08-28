@@ -169,9 +169,7 @@ try {
     Assert ($uninstallText -match 'Non-interactive uninstall purge requires -Force') 'Uninstall purge must guard unattended destructive runs.'
     Assert ($uninstallText -match '\[switch\]\$ElevatedRelaunch') 'Uninstall purge must mark the elevated relaunch to prevent confusing loops.'
     Assert ($uninstallText -match 'UAC returned without administrator rights') 'Uninstall purge must clearly fail if elevation does not produce admin rights.'
-    Assert ($uninstallText -match '\[string\]\$LogPath') 'Elevated uninstall failures must support a persistent transcript path.'
-    Assert ($uninstallText -match 'Win11WindowTilling\\uninstall-logs') 'Uninstall diagnostics must survive product-cache removal.'
-    Assert ($uninstallText -match 'Details: \$elevatedLogPath') 'The parent process must reveal the elevated uninstall log path.'
+    Assert ($uninstallText -notmatch 'Start-Transcript|Stop-Transcript|uninstall-logs') 'Uninstall must not create transcript logs.'
     $powerShellQuoteEscape = [regex]::Escape("-replace '`"','`"`"'")
     Assert ($uninstallText -match $powerShellQuoteEscape) 'Elevation arguments must use Windows PowerShell-compatible quote escaping.'
     Assert ($uninstallText -notmatch 'exit \$process\.ExitCode') 'Successful elevation must not close the caller PowerShell session.'
