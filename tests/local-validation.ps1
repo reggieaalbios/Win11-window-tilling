@@ -190,7 +190,11 @@ try {
     foreach ($managedProgram in @('\^AutoHotkey\$','\^cava\$','\^komorebi\$','\^YASB Reborn\$','\^zoxide\$')) {
         Assert ($uninstallText -match $managedProgram) "Orphan cleanup is missing an exact managed-program pattern: $managedProgram"
     }
-    foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
+    Assert ($uninstallText -match 'Uninstall-WwtUserPackages[\s\S]+Invoke-SelfElevation') 'User-scoped WinGet packages must be removed before elevation.'
+    Assert ($uninstallText -match 'Uninstall-WwtRegisteredApplications') 'Elevated dependency removal must use registered MSI and quiet uninstallers.'
+    Assert ($uninstallText -notmatch 'try \{ Uninstall-WwtDependencies') 'Elevated uninstall must not use WinGet for user-scoped packages.'
+    Assert ($uninstallText -match 'Start-Process msiexec\.exe -ArgumentList @\(''/x'',\$keyName') 'MSI product codes must be discovered from installed registry entries.'
+    foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtRegisteredApplications','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }
     foreach ($dependencyPath in @('komorebi','YASB','WezTerm','AutoHotkey','DWMBlurGlass','oh-my-posh','zoxide','cava')) {

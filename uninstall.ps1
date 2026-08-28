@@ -5,6 +5,7 @@ param(
     [switch]$KeepLogs,
     [switch]$RemoveRepositoryCheckout,
     [switch]$Reboot,
+    [switch]$UserPackagePassComplete,
     [switch]$ElevatedRelaunch,
     [string]$LogPath
 )
@@ -60,6 +61,7 @@ function Invoke-SelfElevation {
     if ($KeepLogs) { $values += '-KeepLogs' }
     if ($RemoveRepositoryCheckout) { $values += '-RemoveRepositoryCheckout' }
     if ($Reboot) { $values += '-Reboot' }
+    if ($UserPackagePassComplete) { $values += '-UserPackagePassComplete' }
     $values += @('-ElevatedRelaunch','-LogPath',$elevatedLogPath)
     Write-Host 'Launching elevated uninstall purge for machine-level apps and startup entries...' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
@@ -166,8 +168,38 @@ function Remove-KnownPath {
 }
 
 function Stop-WwtProcesses {
-    Get-Process -Name komorebi,komorebic,yasb,yasbc,cava,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm-gui -ErrorAction SilentlyContinue |
-        Stop-Process -Force -ErrorAction SilentlyContinue
+    # Some packages use helper executables whose names vary by release. Catch
+    # those by their known installation directories as well as by process name.
+    $managedPathFragments = @(
+        '\komorebi\','\YASB\','\AutoHotkey\','\WezTerm\','\DWMBlurGlass\',
+        '\Programs\oh-my-posh\','\Programs\zoxide\','\cava\'
+    )
+
+    foreach ($attempt in 1..3) {
+        Get-Process -Name komorebi,komorebic,yasb,yasbc,cava,komorebic-no-console,AutoHotkey,AutoHotkey32,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm,wezterm-gui,wezterm-mux-server -ErrorAction SilentlyContinue |
+            Stop-Process -Force -ErrorAction SilentlyContinue
+
+        Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+            Where-Object {
+                $executablePath = [string]$_.ExecutablePath
+                $executablePath -and @($managedPathFragments | Where-Object {
+                    $executablePath.IndexOf($_,[StringComparison]::OrdinalIgnoreCase) -ge 0
+                }).Count
+            } |
+            ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
+
+        Start-Sleep -Milliseconds 200
+    }
+}
+
+function Stop-WwtServices {
+    $servicePattern = 'komorebi|yasb|autohotkey|wezterm|dwmblurglass|oh.?my.?posh|zoxide|cava'
+    Get-Service -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match $servicePattern -or $_.DisplayName -match $servicePattern } |
+        ForEach-Object {
+            Set-Service -Name $_.Name -StartupType Disabled -ErrorAction SilentlyContinue
+            Stop-Service -Name $_.Name -Force -ErrorAction SilentlyContinue
+        }
 }
 
 function Remove-WwtStartupEntries {
@@ -208,6 +240,56 @@ function Remove-WwtDependencyLeftovers {
     }
 }
 
+function Uninstall-WwtUserPackages {
+    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
+    if (-not $winget) { return }
+    foreach ($packageId in @('ajeetdsouza.zoxide','JanDeDobbeleer.OhMyPosh')) {
+        & $winget.Source uninstall --id $packageId --exact --silent --disable-interactivity
+    }
+}
+
+function Uninstall-WwtRegisteredApplications {
+    $uninstallRoots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $managedNames = @('^AutoHotkey$','^cava$','^komorebi$','^WezTerm(?: version .+)?$','^YASB Reborn$')
+
+    foreach ($root in $uninstallRoots) {
+        foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
+            if (-not $record -or -not $record.DisplayName) { continue }
+            if (-not @($managedNames | Where-Object { $record.DisplayName -match $_ }).Count) { continue }
+
+            $keyName = $entry.PSChildName
+            if ($keyName -match '^\{[0-9A-Fa-f-]{36}\}$') {
+                $process = Start-Process msiexec.exe -ArgumentList @('/x',$keyName,'/qn','/norestart') -Wait -PassThru
+                if ($process.ExitCode -notin @(0,1605,1614,1641,3010)) {
+                    Write-Warning "MSI uninstall for $($record.DisplayName) returned exit code $($process.ExitCode); cleanup will continue."
+                }
+                continue
+            }
+
+            $command = [string]$record.QuietUninstallString
+            if (-not $command) { $command = [string]$record.UninstallString }
+            if ($command -match '^"([^"]+)"\s*(.*)$') {
+                $executable = $matches[1]
+                $arguments = $matches[2]
+            } elseif ($command -match '^(\S+)\s*(.*)$') {
+                $executable = $matches[1]
+                $arguments = $matches[2]
+            } else {
+                continue
+            }
+            if (-not (Test-Path -LiteralPath $executable)) { continue }
+            $process = Start-Process -FilePath $executable -ArgumentList $arguments -Wait -PassThru
+            if ($process.ExitCode -ne 0) {
+                Write-Warning "Registered uninstaller for $($record.DisplayName) returned exit code $($process.ExitCode); cleanup will continue."
+            }
+        }
+    }
+}
+
 function Remove-WwtOrphanedUninstallEntries {
     $uninstallRoots = @(
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
@@ -245,6 +327,11 @@ if (-not (Test-Administrator) -and $ElevatedRelaunch) {
 }
 
 if (-not (Test-Administrator)) {
+    if (-not $UserPackagePassComplete) {
+        Write-Host 'Uninstalling user-scoped packages before elevation...' -ForegroundColor Cyan
+        Uninstall-WwtUserPackages
+        $UserPackagePassComplete = $true
+    }
     Invoke-SelfElevation
     return
 }
@@ -262,11 +349,12 @@ if (-not $Force) {
     }
 }
 
-Write-Host 'Stopping desktop stack processes...' -ForegroundColor Cyan
-Stop-WwtProcesses
-
 Write-Host 'Removing startup entries...' -ForegroundColor Cyan
 Remove-WwtStartupEntries
+
+Write-Host 'Stopping desktop stack processes and background services...' -ForegroundColor Cyan
+Stop-WwtServices
+Stop-WwtProcesses
 
 Write-Host 'Removing managed configuration and bundled wallpapers...' -ForegroundColor Cyan
 try { Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host } catch { Add-CleanupWarning $_.Exception.Message }
@@ -276,7 +364,9 @@ foreach ($target in @(Get-WwtManagedTargets)) {
 }
 
 Write-Host 'Uninstalling declared dependencies...' -ForegroundColor Cyan
-try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Write-Warning "Immediate dependency removal was blocked; leftover cleanup will retry. $($_.Exception.Message)" }
+Stop-WwtServices
+Stop-WwtProcesses
+try { Uninstall-WwtRegisteredApplications } catch { Write-Warning "A registered uninstaller failed; leftover cleanup will continue. $($_.Exception.Message)" }
 
 Write-Host 'Removing leftover dependency directories...' -ForegroundColor Cyan
 Stop-WwtProcesses
