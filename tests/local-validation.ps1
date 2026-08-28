@@ -12,7 +12,7 @@ function Assert([bool]$Condition,[string]$Message) { if (-not $Condition) { thro
 
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
-    $scripts = @('bootstrap.ps1','bootstrap-dev.ps1','install.ps1','self-destruct.ps1','src\Win11WindowTiling.psm1','scripts\render-config.ps1')
+    $scripts = @('bootstrap.ps1','bootstrap-dev.ps1','install.ps1','uninstall.ps1','src\Win11WindowTiling.psm1','scripts\render-config.ps1')
     foreach ($relative in $scripts) {
         $tokens=$null; $errors=$null
         [Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRoot $relative),[ref]$tokens,[ref]$errors) | Out-Null
@@ -165,13 +165,13 @@ try {
     Assert ($startupText -match '\$env:ProgramFiles ''AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must find the Program Files AutoHotkey v2 install.'
     Assert ($startupText -match '\$env:LOCALAPPDATA ''Programs\\AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must retain the per-user AutoHotkey v2 fallback.'
     Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
-    $selfDestructText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'self-destruct.ps1') -Raw
-    Assert ($selfDestructText -match 'Non-interactive self destruct requires -Force') 'Self destruct must guard unattended destructive runs.'
+    $uninstallText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'uninstall.ps1') -Raw
+    Assert ($uninstallText -match 'Non-interactive uninstall purge requires -Force') 'Uninstall purge must guard unattended destructive runs.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
-        Assert ($selfDestructText -match $requiredCall) "Self destruct is missing purge step: $requiredCall"
+        Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }
     foreach ($dependencyPath in @('komorebi','YASB','WezTerm','AutoHotkey','DWMBlurGlass','oh-my-posh','zoxide','cava')) {
-        Assert ($selfDestructText -match [regex]::Escape($dependencyPath)) "Self destruct does not mention dependency leftover: $dependencyPath"
+        Assert ($uninstallText -match [regex]::Escape($dependencyPath)) "Uninstall purge does not mention dependency leftover: $dependencyPath"
     }
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"

@@ -37,8 +37,8 @@ Completely purge the desktop stack, including configs, startup entries,
 product caches, bundled wallpapers, and declared dependencies:
 
 ```powershell
-.\self-destruct.ps1
-.\self-destruct.ps1 -Force -NonInteractive
+.\uninstall.ps1
+.\uninstall.ps1 -Force -NonInteractive
 ```
 
 `Win` is the portable default. `Caps` preserves the personal Caps/F13 mapping. A non-interactive reinstall additionally requires `-ForceReinstall`.

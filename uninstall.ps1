@@ -106,7 +106,7 @@ function Remove-WwtDependencyLeftovers {
 }
 
 if ($NonInteractive -and -not $Force) {
-    throw 'Non-interactive self destruct requires -Force.'
+    throw 'Non-interactive uninstall purge requires -Force.'
 }
 
 if (-not (Test-Administrator)) {
@@ -121,7 +121,7 @@ if (-not $Force) {
     Write-Host ''
     $answer = Read-Host 'Type PURGE to continue'
     if ($answer -cne 'PURGE') {
-        Write-Host 'Self destruct cancelled.'
+        Write-Host 'Uninstall purge cancelled.'
         exit 0
     }
 }
@@ -168,4 +168,4 @@ if ($RemoveRepositoryCheckout) {
     Write-Host 'Repository checkout removal was scheduled after this process exits.' -ForegroundColor Yellow
 }
 
-Write-Host 'Self destruct completed.' -ForegroundColor Green
+Write-Host 'Uninstall purge completed.' -ForegroundColor Green
