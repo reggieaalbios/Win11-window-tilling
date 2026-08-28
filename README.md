@@ -4,15 +4,26 @@ A keyboard-first Windows 11 desktop stack installed and maintained by PowerShell
 
 The managed stack includes Komorebi, patched YASB, AutoHotkey v2, WezTerm, Oh My Posh, zoxide, CAVA, DWMBlurGlass, adaptive themes, wallpapers, and the portable configuration set in this repository.
 
-## Development install
+## Stable install
 
-The development command tracks the current `dev` snapshot. It is intentionally not a stable release:
+The normal installer follows `main`, which contains only the fully tested stable configuration:
 
 ```powershell
-irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/dev/bootstrap.ps1 | iex
+irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/main/bootstrap.ps1 | iex
 ```
 
-The bootstrap requires Windows PowerShell 5.1 but does not require Git. It checks for an existing installation before any download, resolves `dev` to a commit, records the archive SHA-256, validates the snapshot structure, and then starts the visible CLI. UAC is requested once when machine-level changes begin.
+## Development install
+
+To test the current `dev` state explicitly:
+
+```powershell
+$bootstrap = irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/dev/bootstrap.ps1
+& ([scriptblock]::Create($bootstrap)) -Ref dev
+```
+
+The development installer may contain changes that have passed local checks but not yet completed physical acceptance.
+
+The bootstrap requires Windows PowerShell 5.1 but does not require Git. It checks for an existing installation before any download, resolves the selected branch to a commit, records the archive SHA-256, validates the snapshot structure, and then starts the visible CLI. UAC is requested once when machine-level changes begin.
 
 Run a checked-out snapshot directly:
 
@@ -35,7 +46,7 @@ Patched YASB is an immutable, hash-verified dependency asset because upstream la
 
 ## Local validation
 
-This solo project intentionally has no GitHub CI. Run the full non-destructive local suite before any history or release decision:
+This solo project intentionally has no GitHub CI. Run the full non-destructive local suite before promoting a commit to `main`:
 
 ```powershell
 .\tests\local-validation.ps1
@@ -46,6 +57,6 @@ This solo project intentionally has no GitHub CI. Run the full non-destructive l
 
 Physical Windows 11 lifecycle checks remain mandatory after these scripts pass. See [local acceptance](docs/local-acceptance.md).
 
-## Release control
+## Branch stability
 
-`main` stays frozen while work continues on `dev`. Nothing merges, tags, or publishes automatically. Only the owner may approve a specific tested `dev` commit for `main`, create a product tag, and publish the first release.
+This project does not publish product releases or use product tags. `dev` contains the current development state. `main` contains only the fully tested, owner-approved stable installer-script state. Promotion from `dev` to `main` is an explicit merge after local and physical acceptance.

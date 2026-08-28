@@ -23,7 +23,7 @@ application and broad end-user customization are future scope.
 | Configuration mode | Opinionated defaults, with machine paths generated during install |
 | Installer UI | Guided Windows PowerShell 5.1 CLI |
 | Development distribution | Commit-resolved GitHub `dev` snapshot downloaded without Git |
-| Stable distribution | None until the owner approves a tested commit, tag, and first release |
+| Stable distribution | The fully tested installer-script state on `main` |
 
 ## Component classification
 
@@ -133,12 +133,12 @@ changed.
   Patched or Windows-build-sensitive exceptions use immutable version and hash
   locks; ordinary healthy packages are capability-detected and left in place.
 - Redistribution and attribution must be documented for wallpapers, SVGs,
-  themes, fonts, and bundled binaries before release.
+  themes, fonts, and bundled binaries before promotion to `main`.
 - Elevation is requested only for the exact component step that requires it.
 - DWMBlurGlass receives a preflight compatibility check, restore point or
   equivalent rollback material where available, and an explicit recovery path.
-- The bootstrap records its resolved commit and archive hash. No product is
-  released until the owner approves the exact tested commit.
+- The bootstrap records its resolved commit and archive hash. No `dev` commit
+  reaches `main` until the owner approves that exact tested commit.
 
 ## Acceptance states
 

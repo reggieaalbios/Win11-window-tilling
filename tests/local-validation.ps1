@@ -21,11 +21,11 @@ try {
     $bootstrapText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'bootstrap.ps1') -Raw
     Assert ($bootstrapText -notmatch '(?im)^\s*(git|gh)\s') 'Bootstrap must not require Git or GitHub CLI.'
     Assert ($bootstrapText -match 'resolvedCommit' -and $bootstrapText -match 'archiveHash' -and $bootstrapText -match 'snapshot.json') 'Bootstrap provenance recording is incomplete.'
+    Assert ($bootstrapText -match "\[string\]\`$Ref = 'main'") 'Stable bootstrap must follow main by default.'
 
     $manifest = Get-Content -LiteralPath (Join-Path $repositoryRoot 'manifests\components.json') -Raw | ConvertFrom-Json
     $immutable = Get-Content -LiteralPath (Join-Path $repositoryRoot 'manifests\immutable-assets.json') -Raw | ConvertFrom-Json
     Assert ($manifest.schemaVersion -eq 2) 'Manifest schema 2 is required.'
-    Assert (-not $manifest.releaseReady) 'The development snapshot must never be marked release-ready automatically.'
     Assert ($manifest.dependencyPolicy.ordinaryPackages -eq 'skip-capable-or-install-latest-stable') 'Ordinary dependency policy is incorrect.'
     Assert (-not $manifest.dependencyPolicy.allowPrerelease) 'Prerelease dependencies must be disabled.'
     $ordinary = @($manifest.components | Where-Object installStrategy -eq 'winget-stable')
@@ -115,7 +115,7 @@ try {
     [pscustomobject]@{
         Status='PASS'; PowerShell51Parsing=$true; ModifierVariants=2; AutoHotkeyV1Rejected=$true
         AutoHotkeyV2Accepted=$true; DeclineWasZeroChange=$true; BackupRollback=$true
-        InjectedRollbackScenarios=4; RemoteCI=$false; ReleaseReady=[bool]$manifest.releaseReady
+        InjectedRollbackScenarios=4; RemoteCI=$false
     }
 }
 finally {

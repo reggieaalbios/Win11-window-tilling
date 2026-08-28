@@ -1,7 +1,5 @@
 {
   "schemaVersion": 2,
-  "productChannel": "dev",
-  "releaseReady": false,
   "dependencyPolicy": {
     "ordinaryPackages": "skip-capable-or-install-latest-stable",
     "automaticUpgrades": false,

@@ -1,4 +1,4 @@
-# Local acceptance and release gate
+# Local acceptance and main-branch gate
 
 Automated checks run locally, never in GitHub CI. A passing script suite proves parser, manifest, rendering, detection, decline, backup, and rollback invariants; it does not prove physical desktop behavior.
 
@@ -21,7 +21,6 @@ Use a restorable Windows 11 x64 machine and record the exact `dev` commit and sn
 
 Code/process checks cannot close physical interaction items. In particular, recreate affected windows and physically test drag, popup, focus, and startup behavior.
 
-## Owner-only release gate
+## Owner-only main promotion
 
-Local and physical acceptance do not publish anything. The owner explicitly chooses the tested commit, updates `main`, creates a tag, and publishes a release manually. Until that decision, `manifests/components.json` remains `releaseReady: false`.
-
+This project has no product release or product-tag step. The owner explicitly chooses a `dev` commit only after local and physical acceptance, then merges that exact commit into `main`. Branch membership is the stability signal; there is no separate release-readiness flag.
