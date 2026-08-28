@@ -27,6 +27,14 @@ trap {
 $RepositoryRoot = $PSScriptRoot
 Import-Module (Join-Path $RepositoryRoot 'src\Win11WindowTiling.psm1') -Force
 $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
+$cleanupWarnings = New-Object System.Collections.Generic.List[string]
+$rebootCleanup = New-Object System.Collections.Generic.List[string]
+
+function Add-CleanupWarning {
+    param([Parameter(Mandatory)][string]$Message)
+    [void]$cleanupWarnings.Add($Message)
+    Write-Warning $Message
+}
 
 function Test-Administrator {
     $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -57,7 +65,6 @@ function Invoke-SelfElevation {
         throw "Elevated uninstall purge failed with exit code $($process.ExitCode). Details: $elevatedLogPath"
     }
     Write-Host "Uninstall log: $elevatedLogPath" -ForegroundColor DarkGray
-    exit $process.ExitCode
 }
 
 function Assert-UnderKnownRoot {
@@ -77,6 +84,36 @@ function Assert-UnderKnownRoot {
     throw "Refusing to remove path outside known WWT roots: $Path"
 }
 
+function Register-DeleteOnReboot {
+    param([Parameter(Mandatory)][string]$Path)
+    if (-not ('Wwt.NativeMethods' -as [type])) {
+        Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+namespace Wwt {
+    public static class NativeMethods {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool MoveFileEx(string existingName, string newName, int flags);
+    }
+}
+'@
+    }
+
+    $items = @()
+    if (Test-Path -LiteralPath $Path -PathType Container) {
+        $items += @(Get-ChildItem -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue |
+            Sort-Object { $_.FullName.Length } -Descending |
+            Select-Object -ExpandProperty FullName)
+    }
+    $items += $Path
+    foreach ($item in $items) {
+        if (-not [Wwt.NativeMethods]::MoveFileEx($item,$null,4)) {
+            throw "Could not schedule locked path for deletion after reboot: $item"
+        }
+    }
+    [void]$rebootCleanup.Add($Path)
+}
+
 function Remove-KnownPath {
     param(
         [Parameter(Mandatory)][string]$Path,
@@ -85,12 +122,17 @@ function Remove-KnownPath {
     if (-not (Test-Path -LiteralPath $Path)) { return }
     Assert-UnderKnownRoot -Path $Path -Roots $Roots
     if ($PSCmdlet.ShouldProcess($Path,'Remove')) {
-        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+        foreach ($attempt in 1..3) {
+            Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+            if (-not (Test-Path -LiteralPath $Path)) { return }
+            Start-Sleep -Milliseconds 250
+        }
+        Register-DeleteOnReboot -Path $Path
     }
 }
 
 function Stop-WwtProcesses {
-    Get-Process -Name komorebi,yasb,yasbc,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm-gui -ErrorAction SilentlyContinue |
+    Get-Process -Name komorebi,komorebic,yasb,yasbc,cava,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm-gui -ErrorAction SilentlyContinue |
         Stop-Process -Force -ErrorAction SilentlyContinue
 }
 
@@ -142,6 +184,7 @@ if (-not (Test-Administrator) -and $ElevatedRelaunch) {
 
 if (-not (Test-Administrator)) {
     Invoke-SelfElevation
+    return
 }
 
 if (-not $Force) {
@@ -164,15 +207,18 @@ Write-Host 'Removing startup entries...' -ForegroundColor Cyan
 Remove-WwtStartupEntries
 
 Write-Host 'Removing managed configuration and bundled wallpapers...' -ForegroundColor Cyan
-try { Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host } catch { Write-Warning $_.Exception.Message }
-try { Remove-WwtManagedTargets } catch { Write-Warning $_.Exception.Message }
+try { Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host } catch { Add-CleanupWarning $_.Exception.Message }
+try { Remove-WwtManagedTargets } catch { Add-CleanupWarning $_.Exception.Message }
+foreach ($target in @(Get-WwtManagedTargets)) {
+    try { Remove-KnownPath -Path $target -Roots @($env:USERPROFILE) } catch { Add-CleanupWarning $_.Exception.Message }
+}
 
 Write-Host 'Uninstalling declared dependencies...' -ForegroundColor Cyan
-try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Write-Warning $_.Exception.Message }
+try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Add-CleanupWarning $_.Exception.Message }
 
 Write-Host 'Removing leftover dependency directories...' -ForegroundColor Cyan
 Stop-WwtProcesses
-try { Remove-WwtDependencyLeftovers } catch { Write-Warning $_.Exception.Message }
+try { Remove-WwtDependencyLeftovers } catch { Add-CleanupWarning $_.Exception.Message }
 
 Write-Host 'Purging product caches, artifacts, backups, runtime, source snapshots, and state...' -ForegroundColor Cyan
 if ($KeepLogs) {
@@ -199,7 +245,14 @@ if ($RemoveRepositoryCheckout) {
     Write-Host 'Repository checkout removal was scheduled after this process exits.' -ForegroundColor Yellow
 }
 
-Write-Host 'Uninstall purge completed.' -ForegroundColor Green
+if ($rebootCleanup.Count -gt 0) {
+    Write-Warning "Locked paths were scheduled for deletion. Reboot Windows to finish removing: $($rebootCleanup -join ', ')"
+}
+if ($cleanupWarnings.Count -gt 0) {
+    Write-Warning "Uninstall finished with $($cleanupWarnings.Count) cleanup warning(s). Locked files may require a reboot and another uninstall run."
+} else {
+    Write-Host 'Uninstall purge completed.' -ForegroundColor Green
+}
 if ($LogPath) { Write-Host "Uninstall log: $LogPath" -ForegroundColor DarkGray }
 if ($script:TranscriptStarted) {
     Stop-Transcript | Out-Null

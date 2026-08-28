@@ -174,6 +174,12 @@ try {
     Assert ($uninstallText -match 'Details: \$elevatedLogPath') 'The parent process must reveal the elevated uninstall log path.'
     $powerShellQuoteEscape = [regex]::Escape("-replace '`"','`"`"'")
     Assert ($uninstallText -match $powerShellQuoteEscape) 'Elevation arguments must use Windows PowerShell-compatible quote escaping.'
+    Assert ($uninstallText -notmatch 'exit \$process\.ExitCode') 'Successful elevation must not close the caller PowerShell session.'
+    Assert ($uninstallText -match 'Invoke-SelfElevation\s+return') 'The unelevated script must return after the elevated child completes.'
+    Assert ($uninstallText -match 'cleanup warning\(s\)') 'Partial cleanup must not be reported as a complete purge.'
+    Assert ($uninstallText -match 'komorebi,komorebic,yasb,yasbc,cava') 'Uninstall must stop every managed desktop process, including Cava.'
+    Assert ($uninstallText -match 'MoveFileEx') 'Locked injected files must be scheduled for deletion after reboot.'
+    Assert ($uninstallText -match 'foreach \(\$target in @\(Get-WwtManagedTargets\)\)') 'A locked managed target must not prevent later targets from being removed.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }
