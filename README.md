@@ -17,11 +17,10 @@ irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/main/bo
 To test the current `dev` state explicitly:
 
 ```powershell
-$bootstrap = irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/dev/bootstrap.ps1
-& ([scriptblock]::Create($bootstrap)) -Ref dev
+irm https://raw.githubusercontent.com/reggieaalbios/Win11-window-tilling/dev/bootstrap-dev.ps1 | iex
 ```
 
-The development installer may contain changes that have passed local checks but not yet completed physical acceptance.
+`bootstrap-dev.ps1` is the dedicated development entrypoint and always selects `dev`. The development installer may contain changes that have passed local checks but not yet completed physical acceptance.
 
 The bootstrap requires Windows PowerShell 5.1 but does not require Git. It checks for an existing installation before any download, resolves the selected branch to a commit, records the archive SHA-256, validates the snapshot structure, and then starts the visible CLI. UAC is requested once when machine-level changes begin.
 
