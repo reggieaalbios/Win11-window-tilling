@@ -18,6 +18,7 @@
     },
     {
       "id": "yasb", "required": true, "installStrategy": "immutable-msi",
+      "displayName": "YASB Reborn",
       "commands": ["yasb.exe", "yasbc.exe"], "detectionPaths": ["%ProgramFiles%\\YASB\\yasb.exe"],
       "minimumCapability": "WWT native shortcut and popup coordination patch",
       "requiredFingerprint": "9E0501B42E04EC40BC9C93190B9FCA1554FD30CA732F6A0B040228D55D026380",
@@ -64,6 +65,7 @@
       "minimumCapability": "tested mapping for current Windows build", "healthCheck": "host injection and rollback state",
       "compatibility": [{
         "minimumBuild": 22000, "maximumBuild": 29999, "version": "2.3.2b3", "file": "DWMBlurGlass.2.3.2_Beta3_x64.zip",
+        "productVersionPattern": "^2\\.3\\.2\\+323d38d84a2131c622445e96db049b8118aa0e06$",
         "url": "https://github.com/Maplespe/DWMBlurGlass/releases/download/2.3.2b3/DWMBlurGlass.2.3.2_Beta3_x64.zip",
         "sha256": "32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51"
       }]

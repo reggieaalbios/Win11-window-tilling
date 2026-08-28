@@ -404,6 +404,9 @@ function Get-WwtComponentInventory {
         if ($found -and -not $version -and $component.PSObject.Properties.Name -contains 'packageId' -and $component.packageId) {
             $version = Get-WwtInstalledWingetVersion -PackageId ([string]$component.packageId)
         }
+        if ($found -and -not $version -and $component.id -eq 'dwmblurglass') {
+            try { $version = [string](Get-Item -LiteralPath $found).VersionInfo.ProductVersion } catch { $version = $null }
+        }
         $capable = [bool]$found
         if ($component.id -eq 'autohotkey' -and $found) { $capable = Test-WwtAutoHotkeyV2 -Path $found -Version $version }
         if ($component.id -eq 'yasb' -and $found) {
@@ -412,12 +415,31 @@ function Get-WwtComponentInventory {
             $capable = (Test-Path -LiteralPath $marker) -and ((Get-FileHash -LiteralPath $marker -Algorithm SHA256).Hash -eq $fingerprint)
         }
         if ($component.id -in @('adaptive-theme-engine','wallpapers') -and $found) { $capable = $true }
+        $recoverySource = $null
+        if ($found -and $component.installStrategy -eq 'immutable-msi' -and $component.PSObject.Properties.Name -contains 'displayName') {
+            $recoverySource = Get-WwtMsiRecoverySource -DisplayName ([string]$component.displayName)
+            if (-not $version -and $recoverySource) { $version = [string]$recoverySource.Version }
+        }
         [pscustomobject][ordered]@{
             id=[string]$component.id; required=[bool]$component.required; detected=[bool]$found
             capable=[bool]$capable; version=$version; path=$found; installStrategy=[string]$component.installStrategy
             packageId=if($component.PSObject.Properties.Name -contains 'packageId'){[string]$component.packageId}else{$null}
+            recoverySource=if($recoverySource){[string]$recoverySource.Path}else{$null}
+            recoverySha256=if($recoverySource){[string]$recoverySource.SHA256}else{$null}
         }
     }
+}
+
+function Get-WwtMsiRecoverySource {
+    param([Parameter(Mandatory)][string]$DisplayName)
+    $root = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Installer\UserData\S-1-5-18\Products'
+    foreach ($product in @(Get-ChildItem $root -ErrorAction SilentlyContinue)) {
+        $properties = Get-ItemProperty (Join-Path $product.PSPath 'InstallProperties') -ErrorAction SilentlyContinue
+        if ($properties.DisplayName -eq $DisplayName -and $properties.LocalPackage -and (Test-Path -LiteralPath $properties.LocalPackage)) {
+            return [pscustomobject]@{ Path=[string]$properties.LocalPackage; Version=[string]$properties.DisplayVersion; SHA256=(Get-FileHash -LiteralPath $properties.LocalPackage -Algorithm SHA256).Hash }
+        }
+    }
+    return $null
 }
 
 function Get-WwtInstalledWingetVersion {
@@ -454,12 +476,14 @@ function Get-WwtManagedTargets {
 }
 
 function Backup-WwtStack {
-    param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$OperationId)
+    param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$OperationId,[switch]$IncludeMachineState)
     $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
     $root = Join-Path $paths.BackupRoot $OperationId
     $records = New-Object 'System.Collections.Generic.List[object]'
     $index = 0
-    foreach ($target in @(Get-WwtManagedTargets)) {
+    $recoveryTargets = @(Get-WwtManagedTargets)
+    if($IncludeMachineState){$recoveryTargets += (Join-Path $env:ProgramFiles 'DWMBlurGlass')}
+    foreach ($target in $recoveryTargets) {
         if (-not (Test-Path -LiteralPath $target)) { continue }
         $label = ('{0:D2}-{1}' -f $index,((Split-Path -Leaf $target) -replace '[^A-Za-z0-9._-]','_'))
         $index++
@@ -478,6 +502,17 @@ function Backup-WwtStack {
     }
     $recordPath = Join-Path $root 'backup.json'
     Write-WwtJson -Value ([ordered]@{ schemaVersion=1; createdAt=(Get-Date).ToString('o'); records=$records }) -Path $recordPath
+    if($IncludeMachineState){
+        $tasks = New-Object 'System.Collections.Generic.List[object]'
+        foreach ($taskName in @('Komorebi Delayed Startup','DWMBlurGlass_Extend')) {
+            $task = Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+            $tasks.Add([pscustomobject]@{ name=$taskName; existed=[bool]$task; xml=if($task){Export-ScheduledTask -TaskName $taskName}else{$null} })
+        }
+        $runPath='HKCU:\Software\Microsoft\Windows\CurrentVersion\Run';$runValues=[ordered]@{}
+        $run=Get-ItemProperty -LiteralPath $runPath -ErrorAction SilentlyContinue
+        foreach($name in @('KomorebiDesktopStack','YASB')){$runValues[$name]=if($run -and $run.PSObject.Properties.Name -contains $name){[string]$run.$name}else{$null}}
+        Write-WwtJson -Value ([ordered]@{ schemaVersion=1; tasks=$tasks; runPath=$runPath; runValues=$runValues }) -Path (Join-Path $root 'startup.json')
+    }
     [pscustomobject]@{ Root=$root; RecordPath=$recordPath; Records=$records }
 }
 
@@ -488,6 +523,19 @@ function Restore-WwtStack {
         if (Test-Path -LiteralPath $record.target) { Remove-Item -LiteralPath $record.target -Recurse -Force }
         New-Item -ItemType Directory -Path (Split-Path -Parent $record.target) -Force | Out-Null
         Copy-Item -LiteralPath $record.backup -Destination $record.target -Recurse -Force
+    }
+    $startupPath=Join-Path (Split-Path -Parent $BackupRecordPath) 'startup.json'
+    if(Test-Path $startupPath){
+        $startup=Get-Content -LiteralPath $startupPath -Raw|ConvertFrom-Json
+        foreach($task in @($startup.tasks)){
+            Unregister-ScheduledTask -TaskName $task.name -Confirm:$false -ErrorAction SilentlyContinue
+            if($task.existed -and $task.xml){Register-ScheduledTask -TaskName $task.name -Xml $task.xml -Force|Out-Null}
+        }
+        New-Item -Path $startup.runPath -Force|Out-Null
+        foreach($property in $startup.runValues.PSObject.Properties){
+            Remove-ItemProperty -LiteralPath $startup.runPath -Name $property.Name -ErrorAction SilentlyContinue
+            if($null -ne $property.Value){Set-ItemProperty -LiteralPath $startup.runPath -Name $property.Name -Value ([string]$property.Value)}
+        }
     }
 }
 

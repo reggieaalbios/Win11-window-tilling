@@ -133,10 +133,16 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
         Copy-Item -LiteralPath $destination -Destination (Join-Path $paths.ArtifactRoot $component.asset.file) -Force
         $old = @($Inventory | Where-Object id -eq $component.id)[0]
         if ($IncludeRecovery -and $old.detected) {
-            if (-not $old.capable) { throw "Cannot prepare a trustworthy recovery installer for pre-existing incompatible '$($component.id)'." }
+            if (-not $old.version -or $old.version -notmatch $mapping.productVersionPattern) { throw "Installed DWMBlurGlass '$($old.version)' does not match a tested recovery artifact." }
             $componentRecovery = Join-Path $recoveryRoot $component.id
             New-Item -ItemType Directory -Path $componentRecovery -Force | Out-Null
-            Copy-Item -LiteralPath $destination -Destination (Join-Path $componentRecovery $component.asset.file) -Force
+            if ($old.recoverySource -and (Test-Path -LiteralPath $old.recoverySource)) {
+                $recoveryFile = Join-Path $componentRecovery 'previous.msi'
+                Copy-Item -LiteralPath $old.recoverySource -Destination $recoveryFile -Force
+                if ((Get-FileHash $recoveryFile -Algorithm SHA256).Hash -ne $old.recoverySha256) { throw "Cached recovery MSI changed for '$($component.id)'." }
+            } elseif ($old.capable) {
+                Copy-Item -LiteralPath $destination -Destination (Join-Path $componentRecovery $component.asset.file) -Force
+            } else { throw "Cannot prepare the exact previous installer for '$($component.id)'." }
         }
     }
     foreach ($component in @($manifest.components | Where-Object installStrategy -eq 'guarded-dwm')) {
@@ -174,8 +180,10 @@ function Restore-WwtRecoveryDependencies([string]$PreparationPath) {
                 if($p.ExitCode -notin @(0,1641,3010)){throw "Recovery MSI failed for '$($item.id)'."}
                 if ($item.id -eq 'yasb') {
                     $yasb=@((Read-WwtManifest -RepositoryRoot $RepositoryRoot).components | Where-Object id -eq 'yasb')[0]
-                    $marker=[ordered]@{assetSha256=[string]$yasb.asset.sha256;version=[string]$yasb.asset.version}|ConvertTo-Json -Compress
-                    [IO.File]::WriteAllText((Join-Path $env:ProgramFiles 'YASB\wwt-build.json'),$marker,(New-Object Text.UTF8Encoding($false)))
+                    if ((Get-FileHash $artifact.FullName -Algorithm SHA256).Hash -eq $yasb.asset.sha256) {
+                        $marker=[ordered]@{assetSha256=[string]$yasb.asset.sha256;version=[string]$yasb.asset.version}|ConvertTo-Json -Compress
+                        [IO.File]::WriteAllText((Join-Path $env:ProgramFiles 'YASB\wwt-build.json'),$marker,(New-Object Text.UTF8Encoding($false)))
+                    }
                 }
             }
             '.msix' { Add-AppxPackage -Path $artifact.FullName }
@@ -217,7 +225,7 @@ try {
     if (-not $NonInteractive -and -not (Confirm-Choice 'Continue? [y/N]')) { exit 0 }
     if ($Action -eq 'Uninstall') {
         Write-Stage 'backup' 'Preserving managed baselines before uninstall'
-        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId
+        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId -IncludeMachineState
         Write-Stage 'configuration' 'Restoring managed configuration and startup baselines'
         Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host
         if (-not $NonInteractive -and -not $RemoveDependencies) { $RemoveDependencies = Confirm-Choice 'Also remove desktop-stack dependencies? [y/N]' }
@@ -236,7 +244,7 @@ try {
         Write-Stage 'inventory' 'Recording versions, processes, startup ownership, and recovery materials'
         Write-WwtLog -RepositoryRoot $RepositoryRoot -Event 'reinstall-inventory' -Data @{ operationId=$operationId; preparation=$preparation; components=$inventory }
         Write-Stage 'backup' 'Backing up complete managed targets and product state'
-        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId
+        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId -IncludeMachineState
         Write-Stage 'stop' 'Stopping managed desktop processes'
         Stop-WwtProcesses
         Write-Stage 'purge' 'Removing the declared stack and managed configuration targets'
