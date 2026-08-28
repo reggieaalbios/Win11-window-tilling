@@ -229,43 +229,109 @@ function Uninstall-WwtUserPackages {
 function Uninstall-WwtRegisteredApplications {
     $uninstallRoots = @(
         'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
-        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall'
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
     )
-    $managedNames = @('^AutoHotkey$','^cava$','^komorebi$','^WezTerm(?: version .+)?$','^YASB Reborn$')
+    $managedNames = @(
+        '^AutoHotkey$','^cava$','^komorebi$','^WezTerm(?: version .+)?$',
+        '^YASB Reborn$','^Oh My Posh$','^zoxide$'
+    )
 
     foreach ($root in $uninstallRoots) {
         foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
             $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
-            if (-not $record -or -not $record.DisplayName) { continue }
-            if (-not @($managedNames | Where-Object { $record.DisplayName -match $_ }).Count) { continue }
+            if (-not $record -or -not ($record.PSObject.Properties.Name -contains 'DisplayName')) { continue }
+            $displayName = [string]$record.DisplayName
+            if (-not $displayName -or -not @($managedNames | Where-Object { $displayName -match $_ }).Count) { continue }
 
-            $keyName = $entry.PSChildName
-            if ($keyName -match '^\{[0-9A-Fa-f-]{36}\}$') {
-                $process = Start-Process msiexec.exe -ArgumentList @('/x',$keyName,'/qn','/norestart') -Wait -PassThru
-                if ($process.ExitCode -notin @(0,1605,1614,1641,3010)) {
-                    Write-Warning "MSI uninstall for $($record.DisplayName) returned exit code $($process.ExitCode); cleanup will continue."
+            try {
+                Stop-WwtServices
+                Stop-WwtProcesses
+                $keyName = $entry.PSChildName
+                if ($keyName -match '^\{[0-9A-Fa-f-]{36}\}$') {
+                    $process = Start-Process msiexec.exe -ArgumentList @('/x',$keyName,'/qn','/norestart') -Wait -PassThru
+                    if ($process.ExitCode -notin @(0,1605,1614,1641,3010)) {
+                        throw "MSI exit code $($process.ExitCode)"
+                    }
+                    continue
                 }
-                continue
-            }
 
-            $command = [string]$record.QuietUninstallString
-            if (-not $command) { $command = [string]$record.UninstallString }
-            if ($command -match '^"([^"]+)"\s*(.*)$') {
-                $executable = $matches[1]
-                $arguments = $matches[2]
-            } elseif ($command -match '^(\S+)\s*(.*)$') {
-                $executable = $matches[1]
-                $arguments = $matches[2]
-            } else {
-                continue
-            }
-            if (-not (Test-Path -LiteralPath $executable)) { continue }
-            $process = Start-Process -FilePath $executable -ArgumentList $arguments -Wait -PassThru
-            if ($process.ExitCode -ne 0) {
-                Write-Warning "Registered uninstaller for $($record.DisplayName) returned exit code $($process.ExitCode); cleanup will continue."
+                $command = if ($record.PSObject.Properties.Name -contains 'QuietUninstallString') {
+                    [string]$record.QuietUninstallString
+                } else { '' }
+                if (-not $command -and $record.PSObject.Properties.Name -contains 'UninstallString') {
+                    $command = [string]$record.UninstallString
+                }
+                if ($command -match '^"([^"]+)"\s*(.*)$') {
+                    $executable = $matches[1]
+                    $arguments = $matches[2]
+                } elseif ($command -match '^(\S+)\s*(.*)$') {
+                    $executable = $matches[1]
+                    $arguments = $matches[2]
+                } else {
+                    throw 'No usable uninstall command was registered.'
+                }
+                if (-not (Test-Path -LiteralPath $executable)) {
+                    throw "Registered uninstaller does not exist: $executable"
+                }
+                $process = Start-Process -FilePath $executable -ArgumentList $arguments -Wait -PassThru
+                if ($process.ExitCode -ne 0) { throw "uninstaller exit code $($process.ExitCode)" }
+            } catch {
+                Add-CleanupWarning "Could not run the registered uninstaller for ${displayName}: $($_.Exception.Message)"
             }
         }
     }
+}
+
+function Remove-WwtShortcuts {
+    $shortcutRoots = @(
+        [Environment]::GetFolderPath('Desktop'),
+        [Environment]::GetFolderPath('CommonDesktopDirectory'),
+        [Environment]::GetFolderPath('StartMenu'),
+        [Environment]::GetFolderPath('CommonStartMenu')
+    ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
+    $managedShortcutNames = '^(?:AutoHotkey|cava|komorebi|WezTerm|YASB(?: Reborn)?|Oh My Posh|zoxide|DWMBlurGlass|Win11 Window Tiling)(?: .*)?\.(?:lnk|url)$'
+    $managedTargetPattern = '\\(?:komorebi|YASB|AutoHotkey|WezTerm|DWMBlurGlass)\\|\\Programs\\(?:oh-my-posh|zoxide)\\|\\cava\\'
+    $shell = New-Object -ComObject WScript.Shell
+
+    foreach ($root in $shortcutRoots) {
+        foreach ($shortcut in @(Get-ChildItem -LiteralPath $root -Include '*.lnk','*.url' -Recurse -Force -ErrorAction SilentlyContinue)) {
+            $remove = $shortcut.Name -match $managedShortcutNames
+            if (-not $remove -and $shortcut.Extension -ieq '.lnk') {
+                try { $remove = ([string]$shell.CreateShortcut($shortcut.FullName).TargetPath) -match $managedTargetPattern } catch {}
+            }
+            if ($remove -and $PSCmdlet.ShouldProcess($shortcut.FullName,'Remove managed shortcut')) {
+                Remove-Item -LiteralPath $shortcut.FullName -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
+function Get-WwtUninstallLeftovers {
+    $items = New-Object System.Collections.Generic.List[string]
+    $uninstallRoots = @(
+        'HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
+    )
+    $managedNames = '^(?:AutoHotkey|cava|komorebi|WezTerm(?: version .+)?|YASB Reborn|Oh My Posh|zoxide)$'
+    foreach ($root in $uninstallRoots) {
+        foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
+            if ($record -and ($record.PSObject.Properties.Name -contains 'DisplayName') -and
+                [string]$record.DisplayName -match $managedNames) {
+                [void]$items.Add("Control Panel: $($record.DisplayName)")
+            }
+        }
+    }
+    foreach ($path in @(
+        (Join-Path $env:ProgramFiles 'komorebi'),(Join-Path $env:ProgramFiles 'YASB'),
+        (Join-Path $env:ProgramFiles 'WezTerm'),(Join-Path $env:ProgramFiles 'AutoHotkey'),
+        (Join-Path $env:ProgramFiles 'DWMBlurGlass'),(Join-Path $env:LOCALAPPDATA 'cava')
+    )) {
+        if (Test-Path -LiteralPath $path) { [void]$items.Add("Installed path: $path") }
+    }
+    $items
 }
 
 function Remove-WwtOrphanedUninstallEntries {
@@ -287,9 +353,10 @@ function Remove-WwtOrphanedUninstallEntries {
     foreach ($root in $uninstallRoots) {
         foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
             $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
-            if (-not $record -or -not $record.DisplayName) { continue }
-            if (-not @($managedNames | Where-Object { $record.DisplayName -match $_ }).Count) { continue }
-            if ($PSCmdlet.ShouldProcess($entry.PSPath,"Remove orphaned uninstall record for $($record.DisplayName)")) {
+            if (-not $record -or -not ($record.PSObject.Properties.Name -contains 'DisplayName')) { continue }
+            $displayName = [string]$record.DisplayName
+            if (-not $displayName -or -not @($managedNames | Where-Object { $displayName -match $_ }).Count) { continue }
+            if ($PSCmdlet.ShouldProcess($entry.PSPath,"Remove orphaned uninstall record for $displayName")) {
                 Remove-Item -LiteralPath $entry.PSPath -Recurse -Force
             }
         }
@@ -353,6 +420,9 @@ try { Remove-WwtDependencyLeftovers } catch { Add-CleanupWarning $_.Exception.Me
 Write-Host 'Removing orphaned Programs and Features entries...' -ForegroundColor Cyan
 try { Remove-WwtOrphanedUninstallEntries } catch { Add-CleanupWarning $_.Exception.Message }
 
+Write-Host 'Removing desktop and Start menu shortcuts...' -ForegroundColor Cyan
+try { Remove-WwtShortcuts } catch { Add-CleanupWarning $_.Exception.Message }
+
 Write-Host 'Purging product caches, artifacts, backups, runtime, source snapshots, and state...' -ForegroundColor Cyan
 if ($KeepLogs) {
     foreach ($child in @(Get-ChildItem -LiteralPath $paths.ProductRoot -Force -ErrorAction SilentlyContinue)) {
@@ -386,6 +456,8 @@ if ($rebootCleanup.Count -gt 0) {
         Add-CleanupWarning "Could not register early-boot cleanup: $($_.Exception.Message)"
     }
 }
+$uninstallLeftovers = @(Get-WwtUninstallLeftovers)
+foreach ($leftover in $uninstallLeftovers) { Add-CleanupWarning "Uninstall verification found leftover: $leftover" }
 if ($cleanupWarnings.Count -gt 0) {
     Write-Warning "Uninstall finished with $($cleanupWarnings.Count) cleanup warning(s). Locked files may require a reboot and another uninstall run."
 } else {

@@ -195,7 +195,9 @@ try {
     Assert ($uninstallText -match 'Uninstall-WwtRegisteredApplications') 'Elevated dependency removal must use registered MSI and quiet uninstallers.'
     Assert ($uninstallText -notmatch 'try \{ Uninstall-WwtDependencies') 'Elevated uninstall must not use WinGet for user-scoped packages.'
     Assert ($uninstallText -match 'Start-Process msiexec\.exe -ArgumentList @\(''/x'',\$keyName') 'MSI product codes must be discovered from installed registry entries.'
-    foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtRegisteredApplications','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
+    Assert ($uninstallText -match 'Remove-WwtShortcuts') 'Uninstall must remove managed desktop and Start menu shortcuts.'
+    Assert ($uninstallText -match 'Get-WwtUninstallLeftovers') 'Uninstall must verify that registrations and install directories are gone.'
+    foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtRegisteredApplications','Remove-WwtDependencyLeftovers','Remove-WwtShortcuts','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }
     foreach ($dependencyPath in @('komorebi','YASB','WezTerm','AutoHotkey','DWMBlurGlass','oh-my-posh','zoxide','cava')) {
