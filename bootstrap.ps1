@@ -7,7 +7,7 @@ param(
     [switch]$NonInteractive,
     [switch]$ForceReinstall,
     [string]$Repository = 'reggieaalbios/Win11-window-tilling',
-    [string]$Ref = 'dev'
+    [string]$Ref = 'main'
 )
 
 Set-StrictMode -Version 2.0

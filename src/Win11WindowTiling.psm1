@@ -14,7 +14,6 @@ function Get-WwtPaths {
         ArtifactRoot = Join-Path $productRoot 'artifacts'
         SourceRoot = Join-Path $productRoot 'source'
         CacheRoot = Join-Path $productRoot 'cache'
-        ArtifactLockPath = Join-Path $productRoot 'artifact-lock.json'
         OperationStatePath = Join-Path $productRoot 'operation-state.json'
     }
 }
@@ -99,93 +98,6 @@ function Uninstall-WwtStartupOwnership {
     if ($null -ne $Record.previousRunValue) {
         New-Item -Path $Record.runKeyPath -Force | Out-Null
         Set-ItemProperty -LiteralPath $Record.runKeyPath -Name $Record.runValueName -Value $Record.previousRunValue
-    }
-}
-
-function Get-WwtAcquisitionPlan {
-    param([Parameter(Mandatory)][string]$RepositoryRoot)
-    $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
-    foreach ($component in @($manifest.components)) {
-        $strategy = [string]$component.installStrategy
-        [pscustomobject]@{
-            Id = [string]$component.id
-            Required = [bool]$component.required
-            Version = [string]$component.version
-            Strategy = $strategy
-            PackageId = if ($component.PSObject.Properties.Name -contains 'packageId') { [string]$component.packageId } else { $null }
-            Acquirable = ($strategy -eq 'winget' -and -not [string]::IsNullOrWhiteSpace([string]$component.packageId))
-            Blocker = if ($component.PSObject.Properties.Name -contains 'releaseBlocker') { [string]$component.releaseBlocker } else { $null }
-        }
-    }
-}
-
-function Acquire-WwtDependencies {
-    param([Parameter(Mandatory)][string]$RepositoryRoot, [switch]$Apply)
-    $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
-    $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
-    $plan = @(Get-WwtAcquisitionPlan -RepositoryRoot $RepositoryRoot)
-    if (-not $Apply) {
-        return [pscustomobject]@{
-            Mode = 'Acquire'
-            Applied = $false
-            ProductVersion = $manifest.productVersion
-            ExactVersionPolicy = $true
-            Downloadable = @($plan | Where-Object Acquirable).Count
-            Blocked = @($plan | Where-Object { -not $_.Acquirable -and $_.Blocker }).Count
-            Plan = $plan
-        }
-    }
-
-    $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
-    if (-not $winget) { throw 'Windows Package Manager (winget.exe) is required for dependency acquisition.' }
-
-    $records = New-Object 'System.Collections.Generic.List[object]'
-    foreach ($component in @($plan | Where-Object Acquirable)) {
-        if ([string]::IsNullOrWhiteSpace($component.Version) -or $component.Version -match '^(latest|pending|pending-pin|\*)$') {
-            throw "Component '$($component.Id)' does not have an exact version lock."
-        }
-        $destination = Join-Path $paths.ArtifactRoot (Join-Path $component.Id $component.Version)
-        New-Item -ItemType Directory -Path $destination -Force | Out-Null
-        $arguments = @(
-            'download', '--id', $component.PackageId, '--version', $component.Version,
-            '--exact', '--source', 'winget', '--architecture', 'x64',
-            '--download-directory', $destination, '--skip-dependencies',
-            '--accept-package-agreements', '--accept-source-agreements',
-            '--disable-interactivity'
-        )
-        $process = Start-Process -FilePath $winget.Source -ArgumentList $arguments -Wait -PassThru -NoNewWindow
-        if ($process.ExitCode -ne 0) {
-            throw "Failed to acquire '$($component.Id)' version '$($component.Version)' (winget exit $($process.ExitCode))."
-        }
-        $artifacts = @(Get-ChildItem -LiteralPath $destination -File -Recurse)
-        if (-not $artifacts) { throw "No artifact was downloaded for '$($component.Id)'." }
-        foreach ($artifact in $artifacts) {
-            $records.Add([pscustomobject][ordered]@{
-                component = $component.Id
-                packageId = $component.PackageId
-                version = $component.Version
-                file = $artifact.FullName.Substring($paths.ArtifactRoot.Length).TrimStart('\')
-                size = $artifact.Length
-                sha256 = (Get-FileHash -LiteralPath $artifact.FullName -Algorithm SHA256).Hash
-            })
-        }
-    }
-    $lock = [ordered]@{
-        schemaVersion = 1
-        productVersion = $manifest.productVersion
-        generatedAt = (Get-Date).ToString('o')
-        source = 'winget'
-        exactVersions = $true
-        artifacts = $records
-    }
-    Write-WwtJson -Value $lock -Path $paths.ArtifactLockPath
-    [pscustomobject]@{
-        Mode = 'Acquire'
-        Applied = $true
-        ArtifactRoot = $paths.ArtifactRoot
-        LockPath = $paths.ArtifactLockPath
-        Artifacts = $records.Count
-        RemainingBlockers = @($plan | Where-Object { -not $_.Acquirable -and $_.Blocker }).Count
     }
 }
 
@@ -359,7 +271,7 @@ function Install-WwtConfiguration {
     $startup = Install-WwtStartupOwnership -RepositoryRoot $RepositoryRoot -ExistingRecord $priorStartup
     Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $OperationMode -Step startup-owned -OperationId $operationId | Out-Null
     $installedAt = if ($null -ne $existingState -and $existingState.PSObject.Properties.Name -contains 'installedAt') { $existingState.installedAt } else { (Get-Date).ToString('o') }
-    $state = [ordered]@{ schemaVersion=2; productChannel=$manifest.productChannel; snapshotCommit=$SnapshotCommit; snapshotSha256=$SnapshotSha256; installedAt=$installedAt; updatedAt=(Get-Date).ToString('o'); repositoryRoot=$RepositoryRoot; mainModifier=$MainModifier; files=$records; startup=$startup }
+    $state = [ordered]@{ schemaVersion=2; snapshotCommit=$SnapshotCommit; snapshotSha256=$SnapshotSha256; installedAt=$installedAt; updatedAt=(Get-Date).ToString('o'); repositoryRoot=$RepositoryRoot; mainModifier=$MainModifier; files=$records; startup=$startup }
     Write-WwtJson -Value $state -Path $paths.StatePath
     Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $OperationMode -Step complete -Status complete -OperationId $operationId | Out-Null
     [pscustomobject]@{ Mode=$OperationMode; Applied=$true; State=$paths.StatePath; Files=$records.Count }
