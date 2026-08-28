@@ -49,12 +49,16 @@ if ($parseErrors) {
     throw ($parseErrors | Out-String)
 }
 
-$autoHotkey = Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey\v2\AutoHotkey64.exe'
+$autoHotkeyCandidates = @(
+    (Join-Path $env:ProgramFiles 'AutoHotkey\v2\AutoHotkey64.exe'),
+    (Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey\v2\AutoHotkey64.exe')
+)
+$autoHotkey = @($autoHotkeyCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)[0]
 $ahkScript = Join-Path $testRoot '.config\komorebi\komorebi.ahk'
-if (Test-Path -LiteralPath $autoHotkey) {
-    $process = Start-Process -FilePath $autoHotkey -ArgumentList @('/ErrorStdOut',$ahkScript,'--validate') -Wait -PassThru -NoNewWindow
-    if ($process.ExitCode -ne 0) {
-        throw "AutoHotkey validation failed with exit code $($process.ExitCode)"
+if ($autoHotkey -and (Test-Path -LiteralPath $autoHotkey)) {
+    & cmd.exe /d /c "`"$autoHotkey`" /ErrorStdOut `"$ahkScript`" --validate"
+    if ($LASTEXITCODE -ne 0) {
+        throw "AutoHotkey validation failed with exit code $LASTEXITCODE"
     }
 }
 
@@ -68,10 +72,10 @@ if ((Get-Content -LiteralPath $capsAhk -Raw) -notmatch 'MainModifier := "Caps"')
 if ((Get-Content -LiteralPath $capsShortcuts -Raw | ConvertFrom-Json).sections[0].items[0].keys[0] -ne 'Caps') {
     throw 'Caps modifier was not rendered into the YASB shortcut guide.'
 }
-if (Test-Path -LiteralPath $autoHotkey) {
-    $process = Start-Process -FilePath $autoHotkey -ArgumentList @('/ErrorStdOut',$capsAhk,'--validate') -Wait -PassThru -NoNewWindow
-    if ($process.ExitCode -ne 0) {
-        throw "Caps AutoHotkey validation failed with exit code $($process.ExitCode)"
+if ($autoHotkey -and (Test-Path -LiteralPath $autoHotkey)) {
+    & cmd.exe /d /c "`"$autoHotkey`" /ErrorStdOut `"$capsAhk`" --validate"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Caps AutoHotkey validation failed with exit code $LASTEXITCODE"
     }
 }
 
@@ -81,5 +85,5 @@ if (Test-Path -LiteralPath $autoHotkey) {
     FilesValidated = $files.Count
     JsonValidated = @($files | Where-Object Extension -eq '.json').Count
     PowerShellValidated = @($files | Where-Object Extension -eq '.ps1').Count
-    AutoHotkeyValidated = (Test-Path -LiteralPath $autoHotkey)
+    AutoHotkeyValidated = [bool]($autoHotkey -and (Test-Path -LiteralPath $autoHotkey))
 }

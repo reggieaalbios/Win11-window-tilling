@@ -111,20 +111,6 @@
   border-bottom: 3px solid #24a7ff;
 }
 
-.komorebi-workspaces .ws-btn.button-6,
-.komorebi-workspaces .ws-btn.button-7,
-.komorebi-workspaces .ws-btn.button-8,
-.komorebi-workspaces .ws-btn.button-9 {
-  min-width: 0;
-  max-width: 0;
-  min-height: 0;
-  max-height: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  font-size: 0;
-}
-
 .clock-widget {
   color: #dbeaf2;
   font-weight: 500;
@@ -252,32 +238,31 @@
   color: #78b9d8;
 }
 
-.wallpapers-widget {
-  padding-left: 8px;
-  padding-right: 8px;
-}
-
-.wallpapers-widget .label {
-  font-family: "Segoe UI Symbol", "Segoe UI";
-  font-size: 15px;
-  color: #78b9d8;
-}
-
-.wallpapers-widget:hover {
-  background-color: rgba(69, 139, 176, 0.16);
-  border-radius: 7px;
-}
-
-/* Keep the wallpaper widget alive for its hotkey, but remove its bar icon. */
+.quick-launch-widget,
 .wallpapers-widget,
-.wallpapers-widget .widget-container,
-.wallpapers-widget .label {
-  min-width: 0;
-  max-width: 0;
-  margin: 0;
+.power-menu-widget {
+  min-width: 22px;
+  max-width: 22px;
+  min-height: 21px;
+  max-height: 21px;
+  margin: 2px 2px;
   padding: 0;
   border: none;
-  background: transparent;
+  border-radius: 4px;
+  background-color: rgba(55, 128, 168, 0.16);
+}
+
+.quick-launch-widget:hover,
+.wallpapers-widget:hover,
+.power-menu-widget:hover {
+  background-color: rgba(69, 139, 176, 0.28);
+}
+
+.quick-launch-widget .label,
+.wallpapers-widget .label,
+.power-menu-widget .label {
+  padding: 0 4px;
+  qproperty-alignment: AlignCenter;
 }
 
 .cava-widget.audio-flow {
@@ -334,15 +319,6 @@
   color: #ffffff;
   background-color: rgba(43, 116, 174, 0.72);
   border-color: #588ba5;
-}
-
-.power-menu-widget {
-  padding-left: 8px;
-  padding-right: 10px;
-}
-
-.power-menu-widget .label {
-  font-size: 13px;
 }
 
 .systray-popup,
@@ -677,21 +653,6 @@
   padding: 0;
 }
 
-/* Invisible edge target retained for the Ctrl+Alt+P power-menu shortcut. */
-.power-menu-widget,
-.power-menu-widget .widget-container,
-.power-menu-widget .label {
-  min-width: 6px;
-  max-width: 6px;
-  min-height: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
-  color: transparent;
-  font-size: 0;
-}
-
 /* Visual divider inside the workspace group. */
 .workspace-separator {
   min-width: 1px;
@@ -702,21 +663,6 @@
   padding: 0;
   border: none;
   background-color: rgba(104, 157, 202, 0.48);
-  color: transparent;
-  font-size: 0;
-}
-
-/* Keep Quick Launch top-level so its global keybinding remains registered. */
-.quick-launch-widget,
-.quick-launch-widget .widget-container,
-.quick-launch-widget .icon,
-.quick-launch-widget .label {
-  min-width: 0;
-  max-width: 0;
-  margin: 0;
-  padding: 0;
-  border: none;
-  background: transparent;
   color: transparent;
   font-size: 0;
 }

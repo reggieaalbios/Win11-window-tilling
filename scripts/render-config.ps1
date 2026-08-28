@@ -113,8 +113,7 @@ foreach ($token in $tokens.GetEnumerator()) {
 
 $shortcutsDestination = Join-Path $resolvedOutput '.config\yasb\shortcuts.json'
 $renderedShortcuts = [IO.File]::ReadAllText($shortcutsDestination).
-    Replace('{{MAIN_MODIFIER_LABEL}}', $MainModifier).
-    Replace('"Caps"', ('"{0}"' -f $MainModifier))
+    Replace('{{MAIN_MODIFIER_LABEL}}', $MainModifier)
 [IO.File]::WriteAllText($shortcutsDestination, $renderedShortcuts, $utf8NoBom)
 
 $unresolvedFiles = @($ahkDestination, $komorebiDestination, $shortcutsDestination, $yasbDestination)

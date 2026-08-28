@@ -481,8 +481,11 @@ function Remove-WwtManagedTargets {
     foreach ($target in @(Get-WwtManagedTargets)) {
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
     }
-    $wallpaper = Join-Path $env:USERPROFILE 'Pictures\Wallpapers\wwt-mountain-dawn.png'
-    if (Test-Path -LiteralPath $wallpaper) { Remove-Item -LiteralPath $wallpaper -Force }
+    $wallpaperRoot = Join-Path $env:USERPROFILE 'Pictures\Wallpapers'
+    foreach ($wallpaperName in @('wwt-mountain-dawn.png','jakoolit-anime-purple-eyes.png')) {
+        $wallpaper = Join-Path $wallpaperRoot $wallpaperName
+        if (Test-Path -LiteralPath $wallpaper) { Remove-Item -LiteralPath $wallpaper -Force }
+    }
 }
 
 function Install-WwtMissingDependencies {

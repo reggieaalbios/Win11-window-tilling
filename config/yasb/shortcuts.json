@@ -1,57 +1,59 @@
 {
   "sections": [
     {"title":"Essentials","items":[
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","H"],"description":"Keyboard shortcut help"},
-      {"keys":["Caps","Enter"],"description":"Open terminal"},
-      {"keys":["Caps","Shift","Enter"],"description":"Toggle dropdown terminal"},
-      {"keys":["Caps","D"],"description":"Open quick app launcher"},
-      {"keys":["Caps","W"],"description":"Open wallpaper selector"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","H"],"description":"Open shortcut help"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Enter"],"description":"Open terminal"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","Enter"],"description":"Toggle dropdown terminal"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","D"],"description":"Open app menu"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","W"],"description":"Open wallpaper menu"},
       {"keys":["Ctrl","Alt","P"],"description":"Open power menu"},
       {"keys":["Alt","Tab"],"description":"Cycle apps in the current workspace"}
     ]},
     {"title":"Focus and Windows","items":[
-      {"keys":["Caps","Left"],"description":"Focus left"},
-      {"keys":["Caps","J / Down"],"description":"Focus down"},
-      {"keys":["Caps","K / Up"],"description":"Focus up"},
-      {"keys":["Caps","L / Right"],"description":"Focus right"},
-      {"keys":["Caps","Space"],"description":"Cycle focus"},
-      {"keys":["Caps","Q"],"description":"Close window"},
-      {"keys":["Caps","Shift","M"],"description":"Minimize window"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Left"],"description":"Focus left"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","J / Down"],"description":"Focus down"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","K / Up"],"description":"Focus up"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","L / Right"],"description":"Focus right"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Space"],"description":"Cycle focus"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Q"],"description":"Close window"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","M"],"description":"Minimize window"}
     ]},
     {"title":"Move and Resize","items":[
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Left drag"],"description":"Move or rearrange a managed window"},
-      {"keys":["Caps","Alt","H / J / K / L"],"description":"Move window"},
-      {"keys":["Caps","Shift","H / J / K / L"],"description":"Resize window"},
-      {"keys":["Caps","U / P"],"description":"Decrease or increase width"},
-      {"keys":["Caps","I / O"],"description":"Decrease or increase height"},
-      {"keys":["Caps","R"],"description":"Enter resize mode"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Alt","H / J / K / L"],"description":"Move window"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","H / J / K / L"],"description":"Resize window"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","U / P"],"description":"Decrease or increase width"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","I / O"],"description":"Decrease or increase height"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","R"],"description":"Enter resize mode"}
     ]},
     {"title":"Apps and Dropdowns","items":[
-      {"keys":["Caps","E"],"description":"Open File Explorer"},
-      {"keys":["Caps","B"],"description":"Open browser"},
-      {"keys":["Caps","Shift","E"],"description":"Toggle dropdown Explorer"},
-      {"keys":["Caps","Shift","R"],"description":"Toggle dropdown Notes"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","E"],"description":"Open File Explorer"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","B"],"description":"Open browser"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","E"],"description":"Toggle dropdown Explorer"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","R"],"description":"Toggle dropdown Notes"}
     ]},
     {"title":"Layouts","items":[
-      {"keys":["Caps","T"],"description":"Next layout"},
-      {"keys":["Caps","V"],"description":"Toggle floating"},
-      {"keys":["Caps","Ctrl","F"],"description":"Toggle monocle"},
-      {"keys":["Caps","Shift","W"],"description":"Retile workspace"},
-      {"keys":["Caps","Shift","P"],"description":"Pause Komorebi"},
-      {"keys":["Caps","Shift","F"],"description":"Toggle fullscreen"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","T"],"description":"Next layout"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","V"],"description":"Toggle floating"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","F"],"description":"Toggle monocle"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","W"],"description":"Retile workspace"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","P"],"description":"Pause Komorebi"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","F"],"description":"Toggle fullscreen"}
     ]},
     {"title":"Workspaces and Monitors","items":[
-      {"keys":["Caps","1–5"],"description":"Focus workspace"},
-      {"keys":["Caps","Shift","1–5"],"description":"Move window and follow"},
-      {"keys":["Caps","A / S"],"description":"Previous or next workspace"},
-      {"keys":["Caps","Shift","A / D"],"description":"Move window to another monitor"},
-      {"keys":["Caps","Ctrl","Arrows"],"description":"Move window to next monitor"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","1-9"],"description":"Focus workspace"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","1-9"],"description":"Move window and follow"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","A / S"],"description":"Previous or next workspace"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","A / D"],"description":"Move window to previous or next monitor"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Left / Up"],"description":"Move window to previous monitor"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Right / Down"],"description":"Move window to next monitor"}
     ]},
     {"title":"System","items":[
-      {"keys":["Caps","Shift","S"],"description":"Open screen snip"},
-      {"keys":["Caps","Print Screen"],"description":"Capture full screenshot"},
-      {"keys":["Caps","Ctrl","T"],"description":"Toggle Windows taskbar"},
-      {"keys":["Caps","M"],"description":"Exit Komorebi"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","S"],"description":"Open screen snip"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Print Screen"],"description":"Capture full screenshot"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","T"],"description":"Toggle Windows taskbar"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Backspace"],"description":"Apply safe theme"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","M"],"description":"Exit Komorebi"}
     ]}
   ]
 }

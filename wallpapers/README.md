@@ -3,7 +3,7 @@
 Personal files from `%USERPROFILE%\Pictures\Wallpapers` are never copied into
 the repository or removed by the installer.
 
-## Included asset
+## Included assets
 
 `wwt-mountain-dawn.png` is an original generated project asset created with
 OpenAI's built-in image-generation tool on 2026-08-27 for this repository.
@@ -24,3 +24,9 @@ Final prompt:
 > copyrighted characters, or recognizable locations.
 
 The installer adds approved assets without replacing an existing collection.
+
+`jakoolit-anime-purple-eyes.png` is bundled from JaKooLit's Wallpaper-Bank so
+fresh installs have the same wallpaper menu asset as the maintained setup.
+
+- Source: `https://github.com/JaKooLit/Wallpaper-Bank/blob/main/wallpapers/Anime-Purple-eyes.png`
+- SHA-256: `FA02675E21C87812517A8C36E0627A76CD672EA00716B365CB4A0597FF34E909`

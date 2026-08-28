@@ -12,7 +12,7 @@ function Assert([bool]$Condition,[string]$Message) { if (-not $Condition) { thro
 
 try {
     New-Item -ItemType Directory -Path $temporaryRoot -Force | Out-Null
-    $scripts = @('bootstrap.ps1','bootstrap-dev.ps1','install.ps1','src\Win11WindowTiling.psm1','scripts\render-config.ps1')
+    $scripts = @('bootstrap.ps1','bootstrap-dev.ps1','install.ps1','self-destruct.ps1','src\Win11WindowTiling.psm1','scripts\render-config.ps1')
     foreach ($relative in $scripts) {
         $tokens=$null; $errors=$null
         [Management.Automation.Language.Parser]::ParseFile((Join-Path $repositoryRoot $relative),[ref]$tokens,[ref]$errors) | Out-Null
@@ -54,10 +54,34 @@ try {
         Assert (Test-Path -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.ahk')) "Renderer failed for $modifier."
         $renderedYasb = Get-Content -LiteralPath (Join-Path $renderRoot '.config\yasb\config.yaml') -Raw
         $renderedKomorebi = Get-Content -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.json') -Raw
+        $renderedShortcuts = Get-Content -LiteralPath (Join-Path $renderRoot '.config\yasb\shortcuts.json') -Raw | ConvertFrom-Json
+        $renderedAhk = Get-Content -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.ahk') -Raw
         Assert ($renderedYasb -match 'data_path: "[A-Za-z]:/') "YASB shortcut data_path is not rendered as a YAML-safe Windows path for $modifier."
         Assert ($renderedYasb -notmatch 'data_path: "[A-Za-z]:\\') "YASB shortcut data_path contains unescaped backslashes for $modifier."
+        foreach ($visibleWidget in @('quick_launch','wallpapers','power_menu')) {
+            Assert ($renderedYasb -match "(?s)$visibleWidget\:.*label\: '<img src=") "YASB $visibleWidget does not render a visible image label for $modifier."
+        }
         Assert ($renderedKomorebi -match '"app_specific_configuration_path": "[A-Za-z]:/.+/.config/komorebi/applications.json"') "Komorebi application config path is not rendered as an absolute path for $modifier."
         Assert ($renderedKomorebi -notmatch '\$Env:KOMOREBI_CONFIG_HOME|{{USER_PROFILE_URI}}') "Komorebi config contains unresolved environment or render tokens for $modifier."
+        $komorebiObject = $renderedKomorebi | ConvertFrom-Json
+        Assert (@($komorebiObject.monitors[0].workspaces).Count -eq 9) "Komorebi must render nine preconfigured workspaces for $modifier."
+        foreach ($workspace in 6..9) {
+            $zeroBased = $workspace - 1
+            Assert ($renderedAhk -match "(?m)^$workspace::Komorebic\(`"focus-workspace $zeroBased`"\)") "AHK focus binding is missing for workspace $workspace with $modifier."
+            Assert ($renderedAhk -match "(?m)^\+$workspace::MoveAndFollow\($zeroBased\)") "AHK move-and-follow binding is missing for workspace $workspace with $modifier."
+        }
+        Assert (@($renderedShortcuts.sections.items | Where-Object { $_.keys -contains '1-9' }).Count -ge 1) "Shortcut guide does not describe workspaces 1-9 for $modifier."
+        if ($modifier -eq 'Win') {
+            Assert (-not (@($renderedShortcuts.sections.items.keys) -contains 'Caps')) 'Win shortcut guide leaked Caps labels.'
+        }
+        foreach ($wallpaperName in @('wwt-mountain-dawn.png','jakoolit-anime-purple-eyes.png')) {
+            Assert (Test-Path -LiteralPath (Join-Path $renderRoot "Pictures\Wallpapers\$wallpaperName")) "Renderer did not copy bundled wallpaper $wallpaperName for $modifier."
+        }
+    }
+    $yasbStyle = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\yasb\styles.css') -Raw
+    Assert ($yasbStyle -notmatch '\.komorebi-workspaces \.ws-btn\.button-[6-9]') 'YASB CSS hides workspace buttons 6-9.'
+    foreach ($visibleClass in @('quick-launch-widget','wallpapers-widget','power-menu-widget')) {
+        Assert ($yasbStyle -match "(?s)\.$visibleClass.*min-width:\s*22px") "YASB CSS does not keep $visibleClass visible."
     }
 
     Import-Module (Join-Path $repositoryRoot 'src\Win11WindowTiling.psm1') -Force
@@ -141,6 +165,14 @@ try {
     Assert ($startupText -match '\$env:ProgramFiles ''AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must find the Program Files AutoHotkey v2 install.'
     Assert ($startupText -match '\$env:LOCALAPPDATA ''Programs\\AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must retain the per-user AutoHotkey v2 fallback.'
     Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
+    $selfDestructText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'self-destruct.ps1') -Raw
+    Assert ($selfDestructText -match 'Non-interactive self destruct requires -Force') 'Self destruct must guard unattended destructive runs.'
+    foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
+        Assert ($selfDestructText -match $requiredCall) "Self destruct is missing purge step: $requiredCall"
+    }
+    foreach ($dependencyPath in @('komorebi','YASB','WezTerm','AutoHotkey','DWMBlurGlass','oh-my-posh','zoxide','cava')) {
+        Assert ($selfDestructText -match [regex]::Escape($dependencyPath)) "Self destruct does not mention dependency leftover: $dependencyPath"
+    }
     foreach ($failure in @('before-purge','dependency-installation','config-deployment','startup-registration')) {
         Assert ($installText -match [regex]::Escape($failure)) "Failure injection hook is missing: $failure"
     }

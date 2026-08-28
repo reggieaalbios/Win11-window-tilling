@@ -33,6 +33,14 @@ Run a checked-out snapshot directly:
 .\install.ps1 -Action Uninstall
 ```
 
+Completely purge the desktop stack, including configs, startup entries,
+product caches, bundled wallpapers, and declared dependencies:
+
+```powershell
+.\self-destruct.ps1
+.\self-destruct.ps1 -Force -NonInteractive
+```
+
 `Win` is the portable default. `Caps` preserves the personal Caps/F13 mapping. A non-interactive reinstall additionally requires `-ForceReinstall`.
 
 All source snapshots, caches, state, backups, and JSONL logs remain below `%LOCALAPPDATA%\Win11WindowTilling`. No telemetry is collected or uploaded.

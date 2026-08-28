@@ -74,7 +74,7 @@
     },
     {
       "id": "wallpapers", "required": true, "installStrategy": "bundled-config", "commands": [],
-      "detectionPaths": ["%USERPROFILE%\\Pictures\\Wallpapers\\wwt-mountain-dawn.png"], "minimumCapability": "WWT-owned wallpaper asset", "healthCheck": "asset hash"
+      "detectionPaths": ["%USERPROFILE%\\Pictures\\Wallpapers\\wwt-mountain-dawn.png", "%USERPROFILE%\\Pictures\\Wallpapers\\jakoolit-anime-purple-eyes.png"], "minimumCapability": "WWT-owned wallpaper assets", "healthCheck": "bundled assets present"
     }
   ]
 }
