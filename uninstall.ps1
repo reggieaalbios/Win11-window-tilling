@@ -3,7 +3,8 @@ param(
     [switch]$Force,
     [switch]$NonInteractive,
     [switch]$KeepLogs,
-    [switch]$RemoveRepositoryCheckout
+    [switch]$RemoveRepositoryCheckout,
+    [switch]$ElevatedRelaunch
 )
 
 Set-StrictMode -Version 2.0
@@ -28,8 +29,12 @@ function Invoke-SelfElevation {
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($KeepLogs) { $values += '-KeepLogs' }
     if ($RemoveRepositoryCheckout) { $values += '-RemoveRepositoryCheckout' }
-    Write-Host 'Administrator permission is required to purge machine-level apps and startup entries.' -ForegroundColor Yellow
+    $values += '-ElevatedRelaunch'
+    Write-Host 'Launching elevated uninstall purge for machine-level apps and startup entries...' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "Elevated uninstall purge failed with exit code $($process.ExitCode)."
+    }
     exit $process.ExitCode
 }
 
@@ -107,6 +112,10 @@ function Remove-WwtDependencyLeftovers {
 
 if ($NonInteractive -and -not $Force) {
     throw 'Non-interactive uninstall purge requires -Force.'
+}
+
+if (-not (Test-Administrator) -and $ElevatedRelaunch) {
+    throw 'UAC returned without administrator rights. Open PowerShell as Administrator and rerun .\uninstall.ps1 -Force -NonInteractive.'
 }
 
 if (-not (Test-Administrator)) {

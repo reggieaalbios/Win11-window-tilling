@@ -167,6 +167,8 @@ try {
     Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
     $uninstallText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'uninstall.ps1') -Raw
     Assert ($uninstallText -match 'Non-interactive uninstall purge requires -Force') 'Uninstall purge must guard unattended destructive runs.'
+    Assert ($uninstallText -match '\[switch\]\$ElevatedRelaunch') 'Uninstall purge must mark the elevated relaunch to prevent confusing loops.'
+    Assert ($uninstallText -match 'UAC returned without administrator rights') 'Uninstall purge must clearly fail if elevation does not produce admin rights.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }
