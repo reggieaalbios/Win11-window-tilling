@@ -169,6 +169,11 @@ try {
     Assert ($uninstallText -match 'Non-interactive uninstall purge requires -Force') 'Uninstall purge must guard unattended destructive runs.'
     Assert ($uninstallText -match '\[switch\]\$ElevatedRelaunch') 'Uninstall purge must mark the elevated relaunch to prevent confusing loops.'
     Assert ($uninstallText -match 'UAC returned without administrator rights') 'Uninstall purge must clearly fail if elevation does not produce admin rights.'
+    Assert ($uninstallText -match '\[string\]\$LogPath') 'Elevated uninstall failures must support a persistent transcript path.'
+    Assert ($uninstallText -match 'Win11WindowTilling\\uninstall-logs') 'Uninstall diagnostics must survive product-cache removal.'
+    Assert ($uninstallText -match 'Details: \$elevatedLogPath') 'The parent process must reveal the elevated uninstall log path.'
+    $powerShellQuoteEscape = [regex]::Escape("-replace '`"','`"`"'")
+    Assert ($uninstallText -match $powerShellQuoteEscape) 'Elevation arguments must use Windows PowerShell-compatible quote escaping.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"
     }

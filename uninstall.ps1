@@ -4,11 +4,25 @@ param(
     [switch]$NonInteractive,
     [switch]$KeepLogs,
     [switch]$RemoveRepositoryCheckout,
-    [switch]$ElevatedRelaunch
+    [switch]$ElevatedRelaunch,
+    [string]$LogPath
 )
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
+
+$script:TranscriptStarted = $false
+if ($LogPath) {
+    $logDirectory = Split-Path -Parent $LogPath
+    New-Item -ItemType Directory -Path $logDirectory -Force | Out-Null
+    Start-Transcript -LiteralPath $LogPath -Force | Out-Null
+    $script:TranscriptStarted = $true
+}
+
+trap {
+    if ($script:TranscriptStarted) { Stop-Transcript | Out-Null }
+    break
+}
 
 $RepositoryRoot = $PSScriptRoot
 Import-Module (Join-Path $RepositoryRoot 'src\Win11WindowTiling.psm1') -Force
@@ -20,21 +34,29 @@ function Test-Administrator {
 }
 
 function Join-QuotedArguments([string[]]$Values) {
-    ($Values | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"','\"') + '"' } else { $_ } }) -join ' '
+    ($Values | ForEach-Object { if ($_ -match '[\s"]') { '"' + ($_ -replace '"','""') + '"' } else { $_ } }) -join ' '
+}
+
+function New-UninstallLogPath {
+    $root = Join-Path ([IO.Path]::GetTempPath()) 'Win11WindowTilling\uninstall-logs'
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    Join-Path $root ('uninstall-{0}-{1}.log' -f (Get-Date -Format 'yyyyMMdd-HHmmss'),[guid]::NewGuid().ToString('N'))
 }
 
 function Invoke-SelfElevation {
+    $elevatedLogPath = if ($LogPath) { $LogPath } else { New-UninstallLogPath }
     $values = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath)
     if ($Force) { $values += '-Force' }
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($KeepLogs) { $values += '-KeepLogs' }
     if ($RemoveRepositoryCheckout) { $values += '-RemoveRepositoryCheckout' }
-    $values += '-ElevatedRelaunch'
+    $values += @('-ElevatedRelaunch','-LogPath',$elevatedLogPath)
     Write-Host 'Launching elevated uninstall purge for machine-level apps and startup entries...' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
     if ($process.ExitCode -ne 0) {
-        throw "Elevated uninstall purge failed with exit code $($process.ExitCode)."
+        throw "Elevated uninstall purge failed with exit code $($process.ExitCode). Details: $elevatedLogPath"
     }
+    Write-Host "Uninstall log: $elevatedLogPath" -ForegroundColor DarkGray
     exit $process.ExitCode
 }
 
@@ -143,14 +165,14 @@ Remove-WwtStartupEntries
 
 Write-Host 'Removing managed configuration and bundled wallpapers...' -ForegroundColor Cyan
 try { Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host } catch { Write-Warning $_.Exception.Message }
-Remove-WwtManagedTargets
+try { Remove-WwtManagedTargets } catch { Write-Warning $_.Exception.Message }
 
 Write-Host 'Uninstalling declared dependencies...' -ForegroundColor Cyan
 try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Write-Warning $_.Exception.Message }
 
 Write-Host 'Removing leftover dependency directories...' -ForegroundColor Cyan
 Stop-WwtProcesses
-Remove-WwtDependencyLeftovers
+try { Remove-WwtDependencyLeftovers } catch { Write-Warning $_.Exception.Message }
 
 Write-Host 'Purging product caches, artifacts, backups, runtime, source snapshots, and state...' -ForegroundColor Cyan
 if ($KeepLogs) {
@@ -178,3 +200,8 @@ if ($RemoveRepositoryCheckout) {
 }
 
 Write-Host 'Uninstall purge completed.' -ForegroundColor Green
+if ($LogPath) { Write-Host "Uninstall log: $LogPath" -ForegroundColor DarkGray }
+if ($script:TranscriptStarted) {
+    Stop-Transcript | Out-Null
+    $script:TranscriptStarted = $false
+}
