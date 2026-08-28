@@ -6,14 +6,35 @@ param(
     [string]$MainModifier = 'Win',
     [switch]$NonInteractive,
     [switch]$ForceReinstall,
+    [switch]$ForceUninstall,
     [switch]$RemoveDependencies,
     [switch]$PauseOnFailure,
     [switch]$PauseOnExit,
-    [ValidateSet('','before-purge','dependency-installation','config-deployment','startup-registration')]
-    [string]$InjectFailureStage = '',
     [string]$SnapshotCommit,
     [string]$SnapshotSha256
 )
+
+# ---------------------------------------------------------------------------
+# FIX #1: -InjectFailureStage removed from the public parameter block.
+# It is a test-only hook for exercising the Reinstall rollback path and must
+# never be reachable via a normal CLI invocation, since it lets any caller
+# force the installer to fail mid-purge / mid-dependency-install on a real
+# machine. It is now read ONLY from an environment variable that is not
+# forwarded across elevation unless it was already present in the parent
+# process's environment, so a child elevated process can't have it injected
+# by the (potentially different-privilege) command line built here.
+# Set it for local testing via:
+#   $env:WWT_TEST_INJECT_FAILURE_STAGE = 'before-purge'
+# ---------------------------------------------------------------------------
+$AllowedInjectStages = @('before-purge','dependency-installation','config-deployment','startup-registration')
+$InjectFailureStage = ''
+if ($env:WWT_TEST_INJECT_FAILURE_STAGE) {
+    if ($AllowedInjectStages -notcontains $env:WWT_TEST_INJECT_FAILURE_STAGE) {
+        throw "WWT_TEST_INJECT_FAILURE_STAGE has an unrecognized value: $env:WWT_TEST_INJECT_FAILURE_STAGE"
+    }
+    $InjectFailureStage = $env:WWT_TEST_INJECT_FAILURE_STAGE
+    Write-Warning "Failure injection is ACTIVE for stage '$InjectFailureStage'. This must only be used in test environments."
+}
 
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
@@ -23,7 +44,19 @@ $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
 $operationId = [guid]::NewGuid().ToString('N')
 $script:stage = 'initialization'
 $script:step = 0
-$script:total = if ($Action -eq 'Reinstall') { 11 } else { 6 }
+
+# ---------------------------------------------------------------------------
+# FIX #4: stage totals now match the actual stage sequence each Action takes,
+# instead of a single hardcoded 6 / 11 split that was wrong for Doctor and
+# Uninstall. Progress reporting is best-effort cosmetic, but it should not
+# lie to the user about how close the operation is to finishing.
+# ---------------------------------------------------------------------------
+$script:total = switch ($Action) {
+    'Reinstall' { 11 }
+    'Doctor'    { 1 }
+    'Uninstall' { if ($RemoveDependencies) { 5 } else { 4 } }
+    default     { 6 } # Install / Repair
+}
 
 function Write-Stage([string]$Name,[string]$Detail) {
     $script:stage = $Name; $script:step++
@@ -55,12 +88,23 @@ function Invoke-SelfElevation {
     $values = @('-NoProfile','-ExecutionPolicy','Bypass','-File',$PSCommandPath,'-Action',$Action,'-MainModifier',$MainModifier)
     if ($NonInteractive) { $values += '-NonInteractive' }
     if ($ForceReinstall) { $values += '-ForceReinstall' }
+    if ($ForceUninstall) { $values += '-ForceUninstall' }
     if ($RemoveDependencies) { $values += '-RemoveDependencies' }
     if ($PauseOnExit) { $values += '-PauseOnExit' }
-    if (-not $NonInteractive) { $values += '-PauseOnFailure' }
-    if ($InjectFailureStage) { $values += @('-InjectFailureStage',$InjectFailureStage) }
+    # FIX #6: only forward -PauseOnFailure when the user actually asked for it
+    # (or defaulted to it interactively) rather than unconditionally forcing
+    # it on every interactive elevation regardless of what was passed in.
+    # We still default to "pause on failure" for interactive sessions so the
+    # elevated window doesn't just vanish on error, but we now do that via an
+    # explicit default computed before elevation, not a silent override here.
+    if ($PauseOnFailure) { $values += '-PauseOnFailure' }
     if ($SnapshotCommit) { $values += @('-SnapshotCommit',$SnapshotCommit) }
     if ($SnapshotSha256) { $values += @('-SnapshotSha256',$SnapshotSha256) }
+    # Deliberately NOT forwarding -InjectFailureStage: the elevated child reads
+    # WWT_TEST_INJECT_FAILURE_STAGE from its own environment. Start-Process
+    # inherits the parent's environment by default, so a value already set in
+    # the parent's environment still propagates for legitimate test setups;
+    # it just can't be injected via a crafted command line.
     Write-Host 'Administrator permission is required for machine-level components.' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
     exit $process.ExitCode
@@ -71,8 +115,17 @@ function Confirm-Choice([string]$Prompt,[bool]$DefaultNo=$true) {
     if ($DefaultNo) { return $answer -match '^[Yy]$' }
     return $answer -notmatch '^[Nn]$'
 }
+
+# ---------------------------------------------------------------------------
+# FIX #5: Show-Plan no longer relies on "whatever isn't captured on the
+# pipeline becomes the return value." The human-readable table and the
+# returned inventory object are now built and emitted explicitly and
+# separately, so a future edit that adds any stray pipeline output inside
+# this function can't silently corrupt what the caller receives.
+# ---------------------------------------------------------------------------
 function Show-Plan {
     $inventory = @(Get-WwtComponentInventory -RepositoryRoot $RepositoryRoot)
+
     Write-Host ''
     Write-Host 'Win11 Window Tiling installation plan' -ForegroundColor Green
     Write-Host "  Action:          $Action"
@@ -82,17 +135,48 @@ function Show-Plan {
     Write-Host '  Elevation:       required for machine components and startup ownership'
     Write-Host '  Telemetry:       none; JSONL logs remain on this computer'
     Write-Host ''
-    $inventory | Select-Object id,@{n='Status';e={if($_.capable){"detected $($_.version)"}elseif($_.detected){'incompatible'}else{'missing'}}},installStrategy | Format-Table -AutoSize | Out-Host
-    $inventory
+
+    $tableText = $inventory |
+        Select-Object id,@{n='Status';e={if($_.capable){"detected $($_.version)"}elseif($_.detected){'incompatible'}else{'missing'}}},installStrategy |
+        Format-Table -AutoSize |
+        Out-String
+    Write-Host $tableText
+
+    return ,$inventory
 }
+
 function Stop-WwtProcesses {
     Get-Process -Name komorebi,yasb,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 }
+
 function Remove-WwtOperationCaches([string[]]$KeepOperationIds = @()) {
     if (-not (Test-Path -LiteralPath $paths.CacheRoot)) { return }
     $resolvedCacheRoot = [IO.Path]::GetFullPath($paths.CacheRoot).TrimEnd('\') + '\'
-    foreach ($directory in @(Get-ChildItem -LiteralPath $paths.CacheRoot -Directory -ErrorAction SilentlyContinue)) {
+    foreach ($directory in @(Get-ChildItem -LiteralPath $paths.CacheRoot -Directory -Force -ErrorAction SilentlyContinue)) {
         if ($KeepOperationIds -contains $directory.Name) { continue }
+
+        # -----------------------------------------------------------------
+        # FIX #3: string-prefix matching on GetFullPath does not detect
+        # reparse points (junctions/symlinks). A directory entry under
+        # CacheRoot could itself be a reparse point pointing anywhere on
+        # disk; -Recurse -Force would then delete through the link outside
+        # the sandbox even though the string check "passed". We now:
+        #   1. Reject the entry outright if it is itself a reparse point.
+        #   2. Reject the entry if any child anywhere below it is a reparse
+        #      point, so a nested junction can't be used to escape either.
+        #   3. Only then apply the resolved-path prefix check as a second,
+        #      belt-and-suspenders guard.
+        # -----------------------------------------------------------------
+        $isReparsePoint = ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0
+        if ($isReparsePoint) {
+            throw "Refusing to prune cache entry that is itself a reparse point: $($directory.FullName)"
+        }
+        $nestedReparsePoints = @(Get-ChildItem -LiteralPath $directory.FullName -Recurse -Force -ErrorAction SilentlyContinue |
+            Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 })
+        if ($nestedReparsePoints.Count -gt 0) {
+            throw "Refusing to prune cache entry containing reparse points: $($directory.FullName)"
+        }
+
         $resolvedDirectory = [IO.Path]::GetFullPath($directory.FullName).TrimEnd('\') + '\'
         if (-not $resolvedDirectory.StartsWith($resolvedCacheRoot,[StringComparison]::OrdinalIgnoreCase)) {
             throw "Refusing to prune cache outside '$($paths.CacheRoot)': $($directory.FullName)"
@@ -100,6 +184,7 @@ function Remove-WwtOperationCaches([string[]]$KeepOperationIds = @()) {
         Remove-Item -LiteralPath $directory.FullName -Recurse -Force
     }
 }
+
 function Get-WwtSystemInventory {
     $processes = @(Get-Process -Name komorebi,yasb,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI -ErrorAction SilentlyContinue | Select-Object ProcessName,Id,Path,@{n='Version';e={$_.FileVersion}})
     $tasks = @()
@@ -115,6 +200,7 @@ function Get-WwtSystemInventory {
     $services = @(Get-Service -ErrorAction SilentlyContinue | Where-Object { $_.Name -match 'Komorebi|YASB|DWMBlurGlass' -or $_.DisplayName -match 'Komorebi|YASB|DWMBlurGlass' } | Select-Object Name,DisplayName,Status,StartType)
     [ordered]@{ capturedAt=(Get-Date).ToString('o'); processes=$processes; tasks=$tasks; runValues=$runValues; services=$services }
 }
+
 function Clear-WwtStaleProductData {
     foreach ($directory in @($paths.RuntimeRoot,(Join-Path $paths.ProductRoot 'staging'))) {
         if (Test-Path $directory) { Remove-Item -LiteralPath $directory -Recurse -Force }
@@ -125,6 +211,7 @@ function Clear-WwtStaleProductData {
     Remove-WwtOperationCaches -KeepOperationIds @($operationId)
     foreach ($state in @($paths.StatePath,$paths.OperationStatePath)) { if(Test-Path $state){Remove-Item -LiteralPath $state -Force} }
 }
+
 function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery) {
     $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
@@ -140,6 +227,32 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
         $args = @('download','--id',$component.packageId,'--exact','--source','winget','--download-directory',$destination,'--accept-package-agreements','--accept-source-agreements','--disable-interactivity')
         $p = Start-Process $winget.Source -ArgumentList $args -Wait -PassThru -NoNewWindow
         if ($p.ExitCode -ne 0) { throw "Could not prepare latest stable artifact for '$($component.id)'." }
+
+        # -------------------------------------------------------------
+        # FIX #2: previously winget-downloaded artifacts had no integrity
+        # check at all, unlike the immutable-msi and guarded-dwm paths
+        # which both verify SHA256 against the manifest. WinGet itself
+        # validates its own package signing/source trust, but that's a
+        # different guarantee than "matches the exact bytes we pinned."
+        # If the manifest pins an expected hash for this component,
+        # verify every downloaded file against it; otherwise at minimum
+        # record what we got so drift is visible in the prep record
+        # instead of being silently trusted.
+        #
+        # NOTE: this requires the manifest schema to optionally carry
+        # $component.asset.sha256 for winget-stable components (it
+        # currently only does for immutable-msi / guarded-dwm). That
+        # addition belongs in Read-WwtManifest / the manifest file itself.
+        # -------------------------------------------------------------
+        $downloadedFiles = @(Get-ChildItem -LiteralPath $destination -File -Recurse -ErrorAction SilentlyContinue)
+        if ($component.PSObject.Properties.Name -contains 'asset' -and $component.asset -and $component.asset.PSObject.Properties.Name -contains 'sha256' -and $component.asset.sha256) {
+            $expected = $component.asset.sha256
+            $matched = @($downloadedFiles | Where-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash -eq $expected })
+            if ($matched.Count -eq 0) { throw "Downloaded WinGet artifact for '$($component.id)' does not match the pinned SHA256 in the manifest." }
+        } else {
+            Write-Warning "No pinned SHA256 for winget component '$($component.id)'; integrity relies solely on WinGet's own source trust."
+        }
+
         if ($IncludeRecovery) {
             $old = @($Inventory | Where-Object id -eq $component.id)[0]
             if ($old.detected -and -not $old.version) { throw "Cannot resolve the installed version of '$($component.id)' for rollback." }
@@ -193,6 +306,7 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
     [IO.File]::WriteAllText($recordPath,($record | ConvertTo-Json -Depth 8),(New-Object Text.UTF8Encoding($false)))
     $recordPath
 }
+
 function Restore-WwtRecoveryDependencies([string]$PreparationPath) {
     $record = Get-Content -LiteralPath $PreparationPath -Raw | ConvertFrom-Json
     if (-not (Test-Path -LiteralPath $record.recoveryRoot)) { throw 'Recovery artifact directory is missing.' }
@@ -232,11 +346,29 @@ function Restore-WwtRecoveryDependencies([string]$PreparationPath) {
     }
 }
 
-if (-not $NonInteractive -and -not $PSBoundParameters.ContainsKey('PauseOnExit')) {
-    $PauseOnExit = $true
+# ---------------------------------------------------------------------------
+# FIX #6 (continued): compute the effective PauseOnFailure default here,
+# before elevation, so the value forwarded to the elevated child reflects
+# what the user actually asked for (or the same "pause on interactive
+# failure" default this script always had), instead of the elevation
+# function unconditionally re-deciding it.
+# ---------------------------------------------------------------------------
+if (-not $NonInteractive -and -not $PSBoundParameters.ContainsKey('PauseOnFailure')) {
+    $PauseOnFailure = $true
 }
-$mutating = $Action -in @('Install','Reinstall','Repair','Uninstall')
+if (-not $NonInteractive) {
+    $PauseOnExit = $PauseOnExit -or $PauseOnFailure
+}
+
+# ---------------------------------------------------------------------------
+# FIX #7: Uninstall now requires the same explicit opt-in for unattended runs
+# that Reinstall already required, instead of proceeding on a destructive
+# action with no confirmation at all when -NonInteractive is set.
+# ---------------------------------------------------------------------------
 if ($Action -eq 'Reinstall' -and $NonInteractive -and -not $ForceReinstall) { throw 'Non-interactive reinstall requires -ForceReinstall.' }
+if ($Action -eq 'Uninstall' -and $NonInteractive -and -not $ForceUninstall) { throw 'Non-interactive uninstall requires -ForceUninstall.' }
+
+$mutating = $Action -in @('Install','Reinstall','Repair','Uninstall')
 if ($mutating -and -not (Test-Administrator)) { Invoke-SelfElevation }
 
 $backup = $null
