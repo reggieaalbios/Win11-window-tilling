@@ -179,6 +179,9 @@ try {
     Assert ($uninstallText -match 'cleanup warning\(s\)') 'Partial cleanup must not be reported as a complete purge.'
     Assert ($uninstallText -match 'komorebi,komorebic,yasb,yasbc,cava') 'Uninstall must stop every managed desktop process, including Cava.'
     Assert ($uninstallText -match 'MoveFileEx') 'Locked injected files must be scheduled for deletion after reboot.'
+    Assert ($uninstallText -match "New-ScheduledTaskTrigger -AtStartup") 'MoveFileEx failures must fall back to an early-boot cleanup task.'
+    Assert ($uninstallText -match "New-ScheduledTaskPrincipal -UserId 'SYSTEM'") 'Early-boot cleanup must run as SYSTEM before user apps can relock files.'
+    Assert ($uninstallText -match 'Win11WindowTilling Uninstall Cleanup') 'Early-boot cleanup must use a deterministic self-removing task.'
     Assert ($uninstallText -match 'foreach \(\$target in @\(Get-WwtManagedTargets\)\)') 'A locked managed target must not prevent later targets from being removed.'
     foreach ($requiredCall in @('Stop-WwtProcesses','Remove-WwtStartupEntries','Uninstall-WwtConfiguration','Remove-WwtManagedTargets','Uninstall-WwtDependencies','Remove-WwtDependencyLeftovers','Remove-KnownPath -Path \$paths\.ProductRoot')) {
         Assert ($uninstallText -match $requiredCall) "Uninstall purge is missing step: $requiredCall"

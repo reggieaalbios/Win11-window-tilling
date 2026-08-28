@@ -107,11 +107,43 @@ namespace Wwt {
     }
     $items += $Path
     foreach ($item in $items) {
-        if (-not [Wwt.NativeMethods]::MoveFileEx($item,$null,4)) {
-            throw "Could not schedule locked path for deletion after reboot: $item"
-        }
+        [void][Wwt.NativeMethods]::MoveFileEx($item,$null,4)
     }
-    [void]$rebootCleanup.Add($Path)
+    if (-not $rebootCleanup.Contains($Path)) { [void]$rebootCleanup.Add($Path) }
+}
+
+function Register-RebootCleanupTask {
+    param([Parameter(Mandatory)][string[]]$Paths)
+    $taskName = 'Win11WindowTilling Uninstall Cleanup'
+    $cleanupRoot = Join-Path $env:ProgramData 'Win11WindowTilling\uninstall-cleanup'
+    $cleanupScript = Join-Path $cleanupRoot 'cleanup.ps1'
+    New-Item -ItemType Directory -Path $cleanupRoot -Force | Out-Null
+
+    $pathLiterals = @($Paths | ForEach-Object { "    '" + ($_ -replace "'","''") + "'" }) -join ",`r`n"
+    $scriptText = @"
+`$ErrorActionPreference = 'SilentlyContinue'
+`$paths = @(
+$pathLiterals
+)
+foreach (`$attempt in 1..10) {
+    foreach (`$path in `$paths) {
+        if (Test-Path -LiteralPath `$path) { Remove-Item -LiteralPath `$path -Recurse -Force }
+    }
+    if (-not @(`$paths | Where-Object { Test-Path -LiteralPath `$_ }).Count) { break }
+    Start-Sleep -Seconds 2
+}
+if (-not @(`$paths | Where-Object { Test-Path -LiteralPath `$_ }).Count) {
+    Unregister-ScheduledTask -TaskName '$taskName' -Confirm:`$false
+    Start-Process powershell.exe -ArgumentList '-NoProfile -WindowStyle Hidden -Command "Start-Sleep -Seconds 2; Remove-Item -LiteralPath ''$cleanupRoot'' -Recurse -Force"' -WindowStyle Hidden
+}
+"@
+    [IO.File]::WriteAllText($cleanupScript,$scriptText,(New-Object Text.UTF8Encoding($false)))
+
+    $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $cleanupScript)
+    $trigger = New-ScheduledTaskTrigger -AtStartup
+    $principal = New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest
+    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Finishes deleting files locked during Win11 Window Tiling uninstall.' -Force | Out-Null
 }
 
 function Remove-KnownPath {
@@ -208,13 +240,13 @@ Remove-WwtStartupEntries
 
 Write-Host 'Removing managed configuration and bundled wallpapers...' -ForegroundColor Cyan
 try { Uninstall-WwtConfiguration -RepositoryRoot $RepositoryRoot -Apply | Out-Host } catch { Add-CleanupWarning $_.Exception.Message }
-try { Remove-WwtManagedTargets } catch { Add-CleanupWarning $_.Exception.Message }
+try { Remove-WwtManagedTargets } catch { Write-Warning "Immediate managed-target removal was blocked; reboot cleanup will retry. $($_.Exception.Message)" }
 foreach ($target in @(Get-WwtManagedTargets)) {
     try { Remove-KnownPath -Path $target -Roots @($env:USERPROFILE) } catch { Add-CleanupWarning $_.Exception.Message }
 }
 
 Write-Host 'Uninstalling declared dependencies...' -ForegroundColor Cyan
-try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Add-CleanupWarning $_.Exception.Message }
+try { Uninstall-WwtDependencies -RepositoryRoot $RepositoryRoot } catch { Write-Warning "Immediate dependency removal was blocked; leftover cleanup will retry. $($_.Exception.Message)" }
 
 Write-Host 'Removing leftover dependency directories...' -ForegroundColor Cyan
 Stop-WwtProcesses
@@ -246,7 +278,12 @@ if ($RemoveRepositoryCheckout) {
 }
 
 if ($rebootCleanup.Count -gt 0) {
-    Write-Warning "Locked paths were scheduled for deletion. Reboot Windows to finish removing: $($rebootCleanup -join ', ')"
+    try {
+        Register-RebootCleanupTask -Paths @($rebootCleanup)
+        Write-Warning "Locked paths will be removed by an early-boot cleanup task. Reboot Windows to finish removing: $($rebootCleanup -join ', ')"
+    } catch {
+        Add-CleanupWarning "Could not register early-boot cleanup: $($_.Exception.Message)"
+    }
 }
 if ($cleanupWarnings.Count -gt 0) {
     Write-Warning "Uninstall finished with $($cleanupWarnings.Count) cleanup warning(s). Locked files may require a reboot and another uninstall run."
