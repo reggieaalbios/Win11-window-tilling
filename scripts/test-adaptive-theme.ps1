@@ -39,7 +39,9 @@ try {
     $light=Invoke-AdaptiveTheme -Mode Generate -Image $lightImage -TargetUserProfile $profileRoot -TargetLocalAppData $localRoot -StateRoot $stateRoot -NoReload -NoSystemAccent
     if($dark.mode-ne'dark'-or$light.mode-ne'light'){throw "Expected dark and light modes; got $($dark.mode) and $($light.mode)."}
     if(($dark.roles|ConvertTo-Json -Compress)-ne($darkAgain.roles|ConvertTo-Json -Compress)){throw 'Palette generation is not deterministic.'}
-    foreach($theme in @($dark,$light)){if(@($theme.contrastResults|Where-Object{[double]$_.ratio-lt[double]$_.minimum}).Count){throw 'A generated theme failed contrast validation.'};if([double]$theme.opacity.bar-gt.92){throw 'Opacity exceeded the 92 percent cap.'}}
+    foreach($theme in @($dark,$light)){if([int]$theme.schemaVersion-lt5-or-not$theme.roles.accent2-or-not$theme.roles.accent3){throw 'Multi-accent palette schema is missing.'};if(@($theme.contrastResults|Where-Object{[double]$_.ratio-lt[double]$_.minimum}).Count){throw 'A generated theme failed contrast validation.'};if([double]$theme.opacity.bar-lt.78-or[double]$theme.opacity.popup-lt.88-or[double]$theme.opacity.popup-gt.94){throw 'Glass surface opacity is outside the supported range.'}}
+    $minimalKomorebi=New-KomorebiText '{"window_hiding_behaviour":"Cloak"}' $dark|ConvertFrom-Json
+    if(-not$minimalKomorebi.border-or$minimalKomorebi.border_colours.single-ne$dark.roles.focus-or$minimalKomorebi.border_colours.floating-ne$dark.roles.accent2){throw 'Komorebi border properties were not created or mapped correctly.'}
 
     $applied=Invoke-AdaptiveTheme -Mode Apply -Image $darkImage -TargetUserProfile $profileRoot -TargetLocalAppData $localRoot -StateRoot $stateRoot -NoReload -NoSystemAccent
     foreach($path in @('.config\yasb\styles.theme.css','.config\yasb\styles.css','.config\komorebi\komorebi.json','wwt-theme.lua','.config\ohmyposh\catppuccin_mocha.omp.json')){if(-not(Test-Path -LiteralPath (Join-Path $profileRoot $path))){throw "Theme adapter output is missing: $path"}}

@@ -1,18 +1,19 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 5,
   "wallpaper": null,
   "wallpaperHash": "fa02675e21c87812517a8c36e0627a76cd672ea00716b365cb4a0597ff34e909",
   "generatedAt": "static-default-theme",
   "mode": "dark",
-  "opacity": { "bar": 0.62, "popup": 0.86 },
+  "opacity": { "bar": 0.78, "popup": 0.88 },
   "source": { "medianLuminance": 0.0011, "sampleCount": 5184, "clusterCount": 8 },
   "roles": {
     "background": "#121321", "surface": "#232431", "surfaceAlt": "#31323E",
     "text": "#FFFFFF", "textMuted": "#B3B3B8", "border": "#6A5B90",
-    "accent": "#8D70CC", "accentSoft": "#483F67", "hover": "#3A3553",
+    "accent": "#8D70CC", "accent2": "#58B9E8", "accent3": "#E594C5",
+    "accentSoft": "#483F67", "accent2Soft": "#315367", "accent3Soft": "#68475E", "hover": "#385267",
     "active": "#5D4E86", "focus": "#9B81D2", "selectedText": "#000000",
     "success": "#55D6A9", "warning": "#F1C75B", "error": "#FF6B7A",
-    "cava1": "#A68FD7", "cava2": "#8D70CC", "cava3": "#816BDE"
+    "cava1": "#8D70CC", "cava2": "#58B9E8", "cava3": "#E594C5"
   },
   "contrastResults": [
     { "name": "text/background", "ratio": 18.41, "minimum": 4.5 },

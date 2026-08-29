@@ -1,13 +1,13 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 5,
   "wallpaper": null,
   "wallpaperHash": null,
   "generatedAt": "static-safe-theme",
   "mode": "dark",
   "fallback": true,
   "opacity": {
-    "bar": 0.55,
-    "popup": 0.68
+    "bar": 0.78,
+    "popup": 0.88
   },
   "source": {
     "medianLuminance": 0.1,
@@ -22,7 +22,11 @@
     "textMuted": "#B7CCD8",
     "border": "#4FA7D0",
     "accent": "#45BAFF",
+    "accent2": "#80D96B",
+    "accent3": "#C09AF5",
     "accentSoft": "#315F78",
+    "accent2Soft": "#3A6041",
+    "accent3Soft": "#57476F",
     "hover": "#244A61",
     "active": "#2674AE",
     "focus": "#72DDFF",
@@ -30,9 +34,9 @@
     "success": "#55D6A9",
     "warning": "#F1C75B",
     "error": "#FF6B7A",
-    "cava1": "#70E7FF",
-    "cava2": "#45BAFF",
-    "cava3": "#5A8CFF"
+    "cava1": "#45BAFF",
+    "cava2": "#80D96B",
+    "cava3": "#C09AF5"
   },
   "contrastResults": [
     { "name": "text/background", "ratio": 18.15, "minimum": 4.5 },

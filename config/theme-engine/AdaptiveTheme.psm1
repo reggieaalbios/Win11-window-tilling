@@ -1,6 +1,6 @@
 Set-StrictMode -Version 2.0
 $ErrorActionPreference = 'Stop'
-$script:SchemaVersion = 1
+$script:SchemaVersion = 5
 $script:Utf8NoBom = New-Object Text.UTF8Encoding($false)
 
 function Write-JsonFile {
@@ -64,7 +64,7 @@ function Repair-ThemeContrast { param([string]$Foreground,[string]$Background,[d
 function Convert-HexToRgba { param([string]$Hex,[double]$Alpha) $c=Convert-HexToRgb $Hex;'rgba({0}, {1}, {2}, {3})' -f $c.R,$c.G,$c.B,([Math]::Min(0.92,[Math]::Max(0.0,$Alpha)).ToString('0.00',[Globalization.CultureInfo]::InvariantCulture)) }
 
 function Get-WicImageSamples {
-    param([string]$Image,[int]$MaximumSize=96)
+    param([string]$Image,[int]$MaximumSize=128)
     if(-not(Test-Path -LiteralPath $Image)){throw "Wallpaper not found: $Image"}
     Add-Type -AssemblyName PresentationCore;Add-Type -AssemblyName WindowsBase
     $stream=[IO.File]::Open($Image,[IO.FileMode]::Open,[IO.FileAccess]::Read,[IO.FileShare]::ReadWrite)
@@ -76,44 +76,93 @@ function Get-WicImageSamples {
     if($samples.Count-lt8){throw "Wallpaper does not contain enough visible pixels (sample count: $($samples.Count))."};$samples
 }
 
+function Get-ClusterChroma { param($Cluster) [Math]::Sqrt($Cluster.A*$Cluster.A+$Cluster.B*$Cluster.B) }
+function Get-ClusterHue { param($Cluster) $h=[Math]::Atan2($Cluster.B,$Cluster.A)*180/[Math]::PI;if($h-lt0){$h+=360};$h }
+function Get-HueDistance { param($First,$Second) $d=[Math]::Abs((Get-ClusterHue $First)-(Get-ClusterHue $Second));[Math]::Min($d,360-$d) }
+
 function Get-ThemeClusters {
-    param($Samples,[string]$Hash,[int]$Count=8)
-    $bytes=for($i=0;$i-lt$Hash.Length;$i+=2){[Convert]::ToByte($Hash.Substring($i,2),16)};$centers=@()
-    for($c=0;$c-lt$Count;$c++){$offset=($c*4)%($bytes.Count-3);$seed=[BitConverter]::ToUInt32([byte[]]$bytes,$offset);$s=$Samples[$seed%$Samples.Count];$centers+=[pscustomobject]@{L=$s.L;A=$s.A;B=$s.LabB;Count=0}}
-    for($iteration=0;$iteration-lt10;$iteration++){$sumL=New-Object double[] $Count;$sumA=New-Object double[] $Count;$sumB=New-Object double[] $Count;$counts=New-Object int[] $Count
-        foreach($s in $Samples){$best=0;$distance=[double]::MaxValue;for($c=0;$c-lt$Count;$c++){$dl=$s.L-$centers[$c].L;$da=$s.A-$centers[$c].A;$db=$s.LabB-$centers[$c].B;$d=$dl*$dl+$da*$da+$db*$db;if($d-lt$distance){$distance=$d;$best=$c}};$sumL[$best]+=$s.L;$sumA[$best]+=$s.A;$sumB[$best]+=$s.LabB;$counts[$best]++}
-        for($c=0;$c-lt$Count;$c++){if($counts[$c]){$centers[$c]=[pscustomobject]@{L=$sumL[$c]/$counts[$c];A=$sumA[$c]/$counts[$c];B=$sumB[$c]/$counts[$c];Count=$counts[$c]}}}}
+    param($Samples,[string]$Hash,[int]$Count=12)
+    $bytes=for($i=0;$i-lt$Hash.Length;$i+=2){[Convert]::ToByte($Hash.Substring($i,2),16)}
+    $seed=[BitConverter]::ToUInt32([byte[]]$bytes,0);$first=$Samples[$seed%$Samples.Count]
+    $centers=@([pscustomobject]@{L=$first.L;A=$first.A;B=$first.LabB;Count=0})
+    while($centers.Count-lt$Count){
+        $bestSample=$null;$bestScore=-1.0
+        foreach($sample in $Samples){
+            $nearest=[double]::MaxValue
+            foreach($center in $centers){$dl=$sample.L-$center.L;$da=$sample.A-$center.A;$db=$sample.LabB-$center.B;$distance=$dl*$dl+$da*$da+$db*$db;if($distance-lt$nearest){$nearest=$distance}}
+            $chroma=[Math]::Sqrt($sample.A*$sample.A+$sample.LabB*$sample.LabB);$score=$nearest*(0.55+[Math]::Min(0.30,$chroma))
+            if($score-gt$bestScore){$bestScore=$score;$bestSample=$sample}
+        }
+        if($null-eq$bestSample){break}
+        $centers+=[pscustomobject]@{L=$bestSample.L;A=$bestSample.A;B=$bestSample.LabB;Count=0}
+    }
+    for($iteration=0;$iteration-lt14;$iteration++){$sumL=New-Object double[] $centers.Count;$sumA=New-Object double[] $centers.Count;$sumB=New-Object double[] $centers.Count;$counts=New-Object int[] $centers.Count
+        foreach($s in $Samples){$best=0;$distance=[double]::MaxValue;for($c=0;$c-lt$centers.Count;$c++){$dl=$s.L-$centers[$c].L;$da=$s.A-$centers[$c].A;$db=$s.LabB-$centers[$c].B;$d=$dl*$dl+$da*$da+$db*$db;if($d-lt$distance){$distance=$d;$best=$c}};$sumL[$best]+=$s.L;$sumA[$best]+=$s.A;$sumB[$best]+=$s.LabB;$counts[$best]++}
+        for($c=0;$c-lt$centers.Count;$c++){if($counts[$c]){$centers[$c]=[pscustomobject]@{L=$sumL[$c]/$counts[$c];A=$sumA[$c]/$counts[$c];B=$sumB[$c]/$counts[$c];Count=$counts[$c]}}}}
     @($centers|Where-Object Count -gt 0|Sort-Object Count -Descending)
+}
+
+function Convert-ClusterToAccent {
+    param($Cluster,[string]$Mode,[string]$Background,[double]$MinimumContrast=3)
+    $chroma=Get-ClusterChroma $Cluster
+    if($chroma-lt0.001){$a=0.11;$b=0.0}else{$targetChroma=[Math]::Max(0.11,[Math]::Min(0.19,$chroma*1.22));$a=$Cluster.A*$targetChroma/$chroma;$b=$Cluster.B*$targetChroma/$chroma}
+    $lightness=if($Mode-eq'dark'){[Math]::Max(0.68,[Math]::Min(0.78,$Cluster.L))}else{[Math]::Max(0.42,[Math]::Min(0.54,$Cluster.L))}
+    Repair-ThemeContrast (Convert-OklabToHex $lightness $a $b) $Background $MinimumContrast
+}
+
+function Get-HueCandidates {
+    param($Samples)
+    $bins=@{}
+    foreach($sample in $Samples){
+        $chroma=[Math]::Sqrt($sample.A*$sample.A+$sample.LabB*$sample.LabB);if($chroma-lt0.025){continue}
+        $hue=[Math]::Atan2($sample.LabB,$sample.A)*180/[Math]::PI;if($hue-lt0){$hue+=360};$index=[int][Math]::Floor($hue/20)
+        if(-not$bins.ContainsKey($index)){$bins[$index]=[ordered]@{L=0.0;A=0.0;B=0.0;Count=0}}
+        $bin=$bins[$index];$bin.L+=$sample.L;$bin.A+=$sample.A;$bin.B+=$sample.LabB;$bin.Count++
+    }
+    $result=@();foreach($entry in $bins.GetEnumerator()){$bin=$entry.Value;if($bin.Count-lt3){continue};$candidate=[pscustomobject]@{L=$bin.L/$bin.Count;A=$bin.A/$bin.Count;B=$bin.B/$bin.Count;Count=$bin.Count};$candidate|Add-Member NoteProperty Score ((Get-ClusterChroma $candidate)*[Math]::Sqrt($bin.Count/$Samples.Count));$result+=$candidate}
+    @($result|Sort-Object Score -Descending)
 }
 
 function New-SemanticTheme {
     param($Clusters,$Samples,[string]$WallpaperHash,[string]$Wallpaper)
     $sortedSamples=@($Samples|Sort-Object Y);$ys=@($sortedSamples|ForEach-Object Y);$median=[double]$ys[[int][Math]::Floor($ys.Count/2)];$mode=if($median-ge0.55){'light'}else{'dark'};$total=[double]$Samples.Count
-    $cluster=$Clusters|Sort-Object @{Expression={([Math]::Sqrt($_.A*$_.A+$_.B*$_.B)+0.04)*($_.Count/$total)};Descending=$true}|Select-Object -First 1
-    $targetL=if($mode-eq'dark'){[Math]::Max(0.62,[Math]::Min(0.78,$cluster.L))}else{[Math]::Max(0.42,[Math]::Min(0.58,$cluster.L))};$accent=Convert-OklabToHex $targetL $cluster.A $cluster.B
-    $base=if($mode-eq'dark'){'#070B12'}else{'#F2F5F8'};$opposite=if($mode-eq'dark'){'#FFFFFF'}else{'#000000'};$background=Mix-ThemeColor $base $accent 0.08;$surface=Mix-ThemeColor $background $opposite 0.07;$surfaceAlt=Mix-ThemeColor $background $opposite 0.13
-    $border=Repair-ThemeContrast (Mix-ThemeColor $background $accent 0.58) $background 3;$accent=Repair-ThemeContrast $accent $background 3;$text=Get-ReadableColor $background 4.5;$muted=Repair-ThemeContrast (Mix-ThemeColor $text $background 0.32) $background 4.5
-    $roles=[ordered]@{background=$background;surface=$surface;surfaceAlt=$surfaceAlt;text=$text;textMuted=$muted;border=$border;accent=$accent;accentSoft=Mix-ThemeColor $surface $accent 0.35;hover=Mix-ThemeColor $surface $accent 0.22;active=Mix-ThemeColor $surface $accent 0.55;focus=Repair-ThemeContrast (Mix-ThemeColor $accent $opposite 0.12) $background 3;selectedText=Get-ReadableColor $accent 4.5;success=Repair-ThemeContrast '#55D6A9' $background 3;warning=Repair-ThemeContrast '#F1C75B' $background 3;error=Repair-ThemeContrast '#FF6B7A' $background 3;cava1=Repair-ThemeContrast (Mix-ThemeColor $accent '#FFFFFF' 0.22) $background 3;cava2=$accent;cava3=Mix-ThemeColor $accent '#6C63FF' 0.35}
+    $dominant=$Clusters|Sort-Object Count -Descending|Select-Object -First 1
+    $chromatic=@(Get-HueCandidates $Samples)
+    if(-not$chromatic.Count){$chromatic=@($dominant)}
+    $primary=$chromatic[0]
+    $secondary=@($chromatic|Where-Object{(Get-HueDistance $_ $primary)-ge45}|Sort-Object Score -Descending|Select-Object -First 1)[0];if($null-eq$secondary){$secondary=$primary}
+    $tertiary=@($chromatic|Where-Object{(Get-HueDistance $_ $primary)-ge60-and(Get-HueDistance $_ $secondary)-ge60}|Sort-Object Score -Descending|Select-Object -First 1)[0];if($null-eq$tertiary){$tertiary=$secondary}
+    $dominantChroma=Get-ClusterChroma $dominant;$baseChroma=[Math]::Min(0.035,$dominantChroma);$scale=if($dominantChroma-lt0.001){0}else{$baseChroma/$dominantChroma}
+    $backgroundLightness=if($mode-eq'dark'){0.105}else{0.95};$background=Convert-OklabToHex $backgroundLightness ($dominant.A*$scale) ($dominant.B*$scale)
+    $opposite=if($mode-eq'dark'){'#FFFFFF'}else{'#000000'};$surface=Mix-ThemeColor $background $opposite 0.075;$surfaceAlt=Mix-ThemeColor $background $opposite 0.145
+    $accent=Convert-ClusterToAccent $primary $mode $background 4.0;$accent2=Convert-ClusterToAccent $secondary $mode $background 3.5;$accent3=Convert-ClusterToAccent $tertiary $mode $background 3.5
+    $text=if($mode-eq'dark'){'#F7FAFC'}else{'#101317'};$text=Repair-ThemeContrast $text $background 7;$muted=Repair-ThemeContrast (Mix-ThemeColor $text $background 0.34) $background 4.5
+    $border=Repair-ThemeContrast (Mix-ThemeColor $background $accent 0.72) $surface 3;$active=Mix-ThemeColor $surface $accent 0.68;$selectedText=Get-ReadableColor $active 4.5
+    $roles=[ordered]@{background=$background;surface=$surface;surfaceAlt=$surfaceAlt;text=$text;textMuted=$muted;border=$border;accent=$accent;accent2=$accent2;accent3=$accent3;accentSoft=Mix-ThemeColor $surface $accent 0.38;accent2Soft=Mix-ThemeColor $surface $accent2 0.38;accent3Soft=Mix-ThemeColor $surface $accent3 0.38;hover=Mix-ThemeColor $surface $accent2 0.32;active=$active;focus=Repair-ThemeContrast $accent $background 4;selectedText=$selectedText;success=Repair-ThemeContrast '#55D6A9' $background 3;warning=Repair-ThemeContrast '#F1C75B' $background 3;error=Repair-ThemeContrast '#FF6B7A' $background 3;cava1=$accent;cava2=$accent2;cava3=$accent3}
     $sampleColors=@();foreach($percentile in @(0.1,0.5,0.9)){$sample=$sortedSamples[[Math]::Min($sortedSamples.Count-1,[int][Math]::Floor(($sortedSamples.Count-1)*$percentile))];$sampleColors+=Convert-RgbToHex $sample.R $sample.G $sample.B}
-    $barOpacity=0.50
-    while($barOpacity-le0.92){$passes=$true;foreach($sampleColor in $sampleColors){$composited=Get-CompositedColor $sampleColor $background $barOpacity;if((Get-ContrastRatio $text $composited)-lt4.5){$passes=$false;break}};if($passes){break};$barOpacity=[Math]::Round($barOpacity+0.05,2)}
+    $barOpacity=0.78
+    while($barOpacity-le0.92){$passes=$true;foreach($sampleColor in $sampleColors){$composited=Get-CompositedColor $sampleColor $background $barOpacity;if((Get-ContrastRatio $text $composited)-lt7-or(Get-ContrastRatio $muted $composited)-lt4.5-or(Get-ContrastRatio $border $composited)-lt3){$passes=$false;break}};if($passes){break};$barOpacity=[Math]::Round($barOpacity+0.05,2)}
     if($barOpacity-gt0.92){throw 'No translucent surface up to the 92 percent opacity cap passes composited contrast validation.'}
-    $checks=@([ordered]@{name='text/background';ratio=[Math]::Round((Get-ContrastRatio $roles.text $roles.background),2);minimum=4.5},[ordered]@{name='muted/background';ratio=[Math]::Round((Get-ContrastRatio $roles.textMuted $roles.background),2);minimum=4.5},[ordered]@{name='accent/background';ratio=[Math]::Round((Get-ContrastRatio $roles.accent $roles.background),2);minimum=3},[ordered]@{name='border/background';ratio=[Math]::Round((Get-ContrastRatio $roles.border $roles.background),2);minimum=3},[ordered]@{name='selectedText/accent';ratio=[Math]::Round((Get-ContrastRatio $roles.selectedText $roles.accent),2);minimum=4.5})
-    for($i=0;$i-lt$sampleColors.Count;$i++){$composited=Get-CompositedColor $sampleColors[$i] $background $barOpacity;$checks+=[ordered]@{name=('text/composited-'+@(10,50,90)[$i]);ratio=[Math]::Round((Get-ContrastRatio $text $composited),2);minimum=4.5}}
+    $popupOpacity=[Math]::Min(0.94,[Math]::Max(0.88,$barOpacity+0.10))
+    $checks=@([ordered]@{name='text/background';ratio=[Math]::Round((Get-ContrastRatio $roles.text $roles.background),2);minimum=7},[ordered]@{name='text/surface';ratio=[Math]::Round((Get-ContrastRatio $roles.text $roles.surface),2);minimum=7},[ordered]@{name='muted/background';ratio=[Math]::Round((Get-ContrastRatio $roles.textMuted $roles.background),2);minimum=4.5},[ordered]@{name='muted/surface';ratio=[Math]::Round((Get-ContrastRatio $roles.textMuted $roles.surface),2);minimum=4.5},[ordered]@{name='accent/background';ratio=[Math]::Round((Get-ContrastRatio $roles.accent $roles.background),2);minimum=4},[ordered]@{name='accent2/background';ratio=[Math]::Round((Get-ContrastRatio $roles.accent2 $roles.background),2);minimum=3.5},[ordered]@{name='accent3/background';ratio=[Math]::Round((Get-ContrastRatio $roles.accent3 $roles.background),2);minimum=3.5},[ordered]@{name='border/surface';ratio=[Math]::Round((Get-ContrastRatio $roles.border $roles.surface),2);minimum=3},[ordered]@{name='selectedText/active';ratio=[Math]::Round((Get-ContrastRatio $roles.selectedText $roles.active),2);minimum=4.5})
+    for($i=0;$i-lt$sampleColors.Count;$i++){$composited=Get-CompositedColor $sampleColors[$i] $background $barOpacity;$checks+=[ordered]@{name=('text/composited-'+@(10,50,90)[$i]);ratio=[Math]::Round((Get-ContrastRatio $text $composited),2);minimum=7};$checks+=[ordered]@{name=('muted/composited-'+@(10,50,90)[$i]);ratio=[Math]::Round((Get-ContrastRatio $muted $composited),2);minimum=4.5};$checks+=[ordered]@{name=('border/composited-'+@(10,50,90)[$i]);ratio=[Math]::Round((Get-ContrastRatio $border $composited),2);minimum=3}}
     $failedChecks=@($checks|Where-Object{$_.ratio-lt$_.minimum});if($failedChecks.Count){throw ('Generated semantic palette failed contrast validation: '+(($failedChecks|ForEach-Object{"$($_.name)=$($_.ratio)<$($_.minimum)"})-join', '))}
-    [ordered]@{schemaVersion=$script:SchemaVersion;wallpaper=$Wallpaper;wallpaperHash=$WallpaperHash;generatedAt=(Get-Date).ToUniversalTime().ToString('o');mode=$mode;opacity=[ordered]@{bar=$barOpacity;popup=[Math]::Min(0.78,[Math]::Max(0.68,$barOpacity+0.10))};source=[ordered]@{medianLuminance=[Math]::Round($median,4);sampleCount=$Samples.Count;clusterCount=@($Clusters).Count};roles=$roles;contrastResults=$checks}
+    [ordered]@{schemaVersion=$script:SchemaVersion;wallpaper=$Wallpaper;wallpaperHash=$WallpaperHash;generatedAt=(Get-Date).ToUniversalTime().ToString('o');mode=$mode;opacity=[ordered]@{bar=$barOpacity;popup=$popupOpacity};source=[ordered]@{medianLuminance=[Math]::Round($median,4);sampleCount=$Samples.Count;clusterCount=@($Clusters).Count;accentHues=@([Math]::Round((Get-ClusterHue $primary),1),[Math]::Round((Get-ClusterHue $secondary),1),[Math]::Round((Get-ClusterHue $tertiary),1))};roles=$roles;contrastResults=$checks}
 }
 
 function New-WallpaperTheme { param([string]$Image) $resolved=(Resolve-Path -LiteralPath $Image).Path;$hash=(Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant();$samples=Get-WicImageSamples $resolved;$clusters=Get-ThemeClusters $samples $hash;New-SemanticTheme $clusters $samples $hash $resolved }
 function Get-SafeTheme { param($Paths) if(-not(Test-Path -LiteralPath $Paths.SafeThemePath)){throw "Safe theme is missing: $($Paths.SafeThemePath)"};Get-Content -LiteralPath $Paths.SafeThemePath -Raw|ConvertFrom-Json }
 
 function New-YasbThemeCss {
-    param($Theme)$r=$Theme.roles;$barOpacity=.55;$popupOpacity=.68;if($Theme.PSObject.Properties.Name-contains'opacity'){$barOpacity=[double]$Theme.opacity.bar;$popupOpacity=[double]$Theme.opacity.popup};$bg=Convert-HexToRgba $r.background $barOpacity;$popup=Convert-HexToRgba $r.background $popupOpacity;$surface=Convert-HexToRgba $r.surface ([Math]::Min(.78,$barOpacity+.04));$soft=Convert-HexToRgba $r.accentSoft .42;$hover=Convert-HexToRgba $r.hover .70;$active=Convert-HexToRgba $r.active .86
+    param($Theme)$r=$Theme.roles;$barOpacity=.72;$popupOpacity=.84;if($Theme.PSObject.Properties.Name-contains'opacity'){$barOpacity=[double]$Theme.opacity.bar;$popupOpacity=[double]$Theme.opacity.popup};$accent2=$r.accent2;$accent3=$r.accent3;$accent2Soft=$r.accent2Soft;$accent3Soft=$r.accent3Soft;$bg=Convert-HexToRgba $r.background $barOpacity;$popup=Convert-HexToRgba $r.background $popupOpacity;$surface=Convert-HexToRgba $r.surface ([Math]::Min(.92,$barOpacity+.08));$soft=Convert-HexToRgba $r.accentSoft .52;$soft2=Convert-HexToRgba $accent2Soft .52;$soft3=Convert-HexToRgba $accent3Soft .52;$hover=Convert-HexToRgba $r.hover .82;$active=Convert-HexToRgba $r.active .92
 @"
 /* Generated by Win11 Window Tiling adaptive theme. Do not edit. */
 * { color: $($r.text); }
 .yasb-bar { background-color: $bg; }
-.windows-icon-widget, .komorebi-workspaces .ws-btn, .cpu-widget:hover, .memory-widget:hover, .traffic-widget:hover, .volume-widget:hover { background-color: $soft; }
+.windows-icon-widget, .komorebi-workspaces .ws-btn { background-color: $soft; }
+.cpu-widget:hover, .download-widget:hover { color: $($r.accent); background-color: $soft; }
+.memory-widget:hover, .upload-widget:hover { color: $accent2; background-color: $soft2; }
+.traffic-widget:hover, .volume-widget:hover { color: $accent3; background-color: $soft3; }
 .komorebi-workspaces .ws-btn { color: $($r.textMuted); }
 .komorebi-workspaces .ws-btn:hover, .komorebi-workspaces .ws-btn.populated { color: $($r.text); background-color: $hover; }
 .komorebi-workspaces .ws-btn.active { color: $($r.selectedText); background-color: $active; border-color: $($r.focus); }
@@ -130,12 +179,14 @@ function New-YasbThemeCss {
 .power-menu-popup .button, .shortcut-guide-popup .shortcut-row, .whkd-popup .keybind-row { background-color: $surface; border-color: transparent; }
 .power-menu-popup .button.hover, .shortcut-guide-popup .shortcut-row:hover, .whkd-popup .keybind-row:hover { background-color: $hover; border-color: $($r.border); }
 .power-menu-popup .button .label, .quick-launch-popup .search .search-input, .quick-launch-popup .results-list-view, .shortcut-guide-popup .shortcut-description, .whkd-popup .keybind-command { color: $($r.text); }
-.power-menu-popup .button .icon, .quick-launch-popup .search .loader-line, .shortcut-guide-popup .shortcut-plus, .whkd-popup .plus-separator { color: $($r.accent); }
+.power-menu-popup .button .icon, .quick-launch-popup .search .loader-line { color: $($r.accent); }
+.shortcut-guide-popup .shortcut-plus, .whkd-popup .plus-separator { color: $accent2; }
 .power-menu-popup .button.shutdown .icon { color: $($r.error); }
-.power-menu-popup .button.restart .icon { color: $($r.cava2); }
+.power-menu-popup .button.restart .icon { color: $accent2; }
 .power-menu-popup .button.lock .icon { color: $($r.warning); }
 .quick-launch-popup .search, .shortcut-guide-popup .shortcut-search, .whkd-popup .filter-input { color: $($r.text); background-color: $surface; border-color: $($r.border); }
-.quick-launch-popup .search .prefix, .quick-launch-popup .results-list-view::item:selected { color: $($r.selectedText); background-color: $active; border-color: $($r.focus); }
+.quick-launch-popup .search .prefix { color: $accent3; }
+.quick-launch-popup .results-list-view::item:selected { color: $($r.selectedText); background-color: $active; border-color: $($r.focus); }
 .quick-launch-popup .results-list-view::item:hover { background-color: $hover; border-color: $($r.border); }
 .quick-launch-popup .results-list-view .description, .quick-launch-popup .results-empty-text { color: $($r.textMuted); }
 .shortcut-guide-popup .shortcut-section, .whkd-popup .keybind-header { color: $($r.accent); background-color: $soft; }
@@ -147,12 +198,26 @@ function New-YasbThemeCss {
 
 function New-YasbConfigText { param([string]$Text,$Theme)$r=$Theme.roles;$Text=[regex]::Replace($Text,'(?m)^(\s*border_color:\s*)"#[0-9A-Fa-f]{6}"',('$1"'+$r.border+'"'));$Text=[regex]::Replace($Text,'(?m)^(\s*foreground:\s*)"#[0-9A-Fa-f]{6}"',('$1"'+$r.cava1+'"'));$Text=[regex]::Replace($Text,'(?m)^(\s*gradient_color_1:\s*)"#[0-9A-Fa-f]{6}"',('$1"'+$r.cava1+'"'));$Text=[regex]::Replace($Text,'(?m)^(\s*gradient_color_2:\s*)"#[0-9A-Fa-f]{6}"',('$1"'+$r.cava2+'"'));[regex]::Replace($Text,'(?m)^(\s*gradient_color_3:\s*)"#[0-9A-Fa-f]{6}"',('$1"'+$r.cava3+'"')) }
 function New-YasbIconText { param([string]$Text,$Theme) [regex]::Replace($Text,'(?i)(stroke|fill|stop-color)="#[0-9a-f]{6}"',('$1="'+$Theme.roles.accent+'"')) }
-function New-KomorebiText { param([string]$Text,$Theme)$j=$Text|ConvertFrom-Json;$r=$Theme.roles;foreach($n in @('single','stack','monocle','floating')){$j.border_colours.$n=$r.focus};$j.border_colours.unfocused=$r.border;$j.border_colours.unfocused_locked=$r.accentSoft;$j|ConvertTo-Json -Depth 30 }
+function Set-JsonProperty { param($Object,[string]$Name,$Value)if($null-ne$Object.PSObject.Properties[$Name]){$Object.$Name=$Value}else{$Object|Add-Member NoteProperty $Name $Value} }
+function New-KomorebiText {
+    param([string]$Text,$Theme)
+    $j=$Text|ConvertFrom-Json;$r=$Theme.roles;$accent2=$r.accent2;$accent3=$r.accent3
+    Set-JsonProperty $j 'border' $true;Set-JsonProperty $j 'border_implementation' 'Komorebi';Set-JsonProperty $j 'border_width' 2;Set-JsonProperty $j 'border_offset' -1;Set-JsonProperty $j 'border_style' 'Rounded'
+    if(-not($j.PSObject.Properties.Name-contains'border_colours')){Set-JsonProperty $j 'border_colours' ([pscustomobject]@{})}
+    foreach($pair in ([ordered]@{single=$r.focus;stack=$accent2;monocle=$accent3;floating=$accent2;unfocused=$r.border;unfocused_locked=$r.accentSoft}).GetEnumerator()){Set-JsonProperty $j.border_colours $pair.Key $pair.Value}
+    $j|ConvertTo-Json -Depth 30
+}
 function New-WezTermThemeText { param($Theme)$r=$Theme.roles;@"
 -- Generated by Win11 Window Tiling adaptive theme. Do not edit.
-return { colors = { background = "$($r.background)", foreground = "$($r.text)", cursor_bg = "$($r.accent)", cursor_fg = "$($r.selectedText)", cursor_border = "$($r.accent)", selection_bg = "$($r.active)", selection_fg = "$($r.selectedText)", ansi = { "$($r.background)", "$($r.error)", "$($r.success)", "$($r.warning)", "$($r.cava3)", "$($r.accentSoft)", "$($r.cava1)", "$($r.text)" }, brights = { "$($r.surfaceAlt)", "$($r.error)", "$($r.success)", "$($r.warning)", "$($r.cava3)", "$($r.accentSoft)", "$($r.cava1)", "#FFFFFF" } }, window_background_opacity = 0.50 }
+return { colors = { background = "$($r.background)", foreground = "$($r.text)", cursor_bg = "$($r.accent)", cursor_fg = "$($r.selectedText)", cursor_border = "$($r.accent)", selection_bg = "$($r.active)", selection_fg = "$($r.selectedText)", ansi = { "$($r.background)", "$($r.error)", "$($r.success)", "$($r.warning)", "$($r.cava2)", "$($r.cava3)", "$($r.cava1)", "$($r.text)" }, brights = { "$($r.surfaceAlt)", "$($r.error)", "$($r.success)", "$($r.warning)", "$($r.cava2)", "$($r.cava3)", "$($r.cava1)", "#FFFFFF" } }, window_background_opacity = 0.62 }
 "@ }
-function New-OhMyPoshText { param([string]$Text,$Theme)$j=$Text|ConvertFrom-Json;$r=$Theme.roles;$j.palette.blue=$r.cava2;$j.palette.lavender=$r.cava3;$j.palette.os=$r.textMuted;$j.palette.pink=$r.accent;$j.palette.closer=$r.text;$j|ConvertTo-Json -Depth 30 }
+function New-OhMyPoshText {
+    param([string]$Text,$Theme)
+    $j=$Text|ConvertFrom-Json;$r=$Theme.roles
+    if(-not($j.PSObject.Properties.Name-contains'palette')){Set-JsonProperty $j 'palette' ([pscustomobject]@{})}
+    foreach($pair in ([ordered]@{blue=$r.accent2;lavender=$r.accent3;pink=$r.accent;os=$r.textMuted;closer=$r.text;green=$r.success;yellow=$r.warning;red=$r.error;background=$r.background;surface=$r.surface;border=$r.border}).GetEnumerator()){Set-JsonProperty $j.palette $pair.Key $pair.Value}
+    $j|ConvertTo-Json -Depth 30
+}
 
 function Get-ThemeTargets {
     param($Paths,$Theme,[string]$TransactionRoot)
@@ -177,7 +242,21 @@ function Send-DwmRefresh {
 function Restore-DwmSnapshot { param($Snapshot)$path='HKCU:\Software\Microsoft\Windows\DWM';foreach($p in $Snapshot.PSObject.Properties){if($null-eq$p.Value){Remove-ItemProperty -LiteralPath $path -Name $p.Name -ErrorAction SilentlyContinue}else{Set-ItemProperty -LiteralPath $path -Name $p.Name -Type DWord -Value (Convert-ToRegistryDword $p.Value)}};Send-DwmRefresh }
 function Set-DwmTheme { param($Theme)$c=Convert-HexToRgb $Theme.roles.accent;$alpha=[uint64]4278190080;$abgr=[uint32]($alpha-bor([uint64]$c.B-shl16)-bor([uint64]$c.G-shl8)-bor[uint64]$c.R);$argb=[uint32]($alpha-bor([uint64]$c.R-shl16)-bor([uint64]$c.G-shl8)-bor[uint64]$c.B);$path='HKCU:\Software\Microsoft\Windows\DWM';Set-ItemProperty -LiteralPath $path -Name AccentColor -Type DWord -Value $abgr;Set-ItemProperty -LiteralPath $path -Name ColorizationColor -Type DWord -Value $argb;Set-ItemProperty -LiteralPath $path -Name ColorPrevalence -Type DWord -Value 1;Send-DwmRefresh }
 
-function Invoke-ThemeReload { param($Paths,[switch]$NoReload)if($NoReload){return};$k=Get-Command komorebic.exe -ErrorAction SilentlyContinue;if(-not$k){$p=Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe';if(Test-Path -LiteralPath $p){$k=Get-Item $p}};if($k-and(Get-Process komorebi -ErrorAction SilentlyContinue)){& $k.Source reload-configuration|Out-Null;if($LASTEXITCODE){throw "Komorebi reload failed: $LASTEXITCODE"}};$y=Get-Command yasbc.exe -ErrorAction SilentlyContinue;if(-not$y){$p=Join-Path $env:ProgramFiles 'YASB\yasbc.exe';if(Test-Path -LiteralPath $p){$y=Get-Item $p}};if($y-and(Get-Process yasb -ErrorAction SilentlyContinue)){Start-Sleep -Milliseconds 250;& $y.Source reload|Out-Null;if($LASTEXITCODE){throw "YASB reload failed: $LASTEXITCODE"}} }
+function Invoke-ThemeReload {
+    param($Paths,[switch]$NoReload)
+    if($NoReload){return}
+    $k=Get-Command komorebic.exe -ErrorAction SilentlyContinue;if(-not$k){$p=Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe';if(Test-Path -LiteralPath $p){$k=Get-Item $p}}
+    if($k-and(Get-Process komorebi -ErrorAction SilentlyContinue)){
+        $kPath=if($k-is[IO.FileInfo]){$k.FullName}else{$k.Source};$config=Get-Content -LiteralPath $Paths.Komorebi -Raw|ConvertFrom-Json
+        & $kPath border enable|Out-Null;if($LASTEXITCODE){throw "Komorebi border enable failed: $LASTEXITCODE"}
+        & $kPath border-implementation $config.border_implementation.ToLowerInvariant()|Out-Null;if($LASTEXITCODE){throw "Komorebi border implementation refresh failed: $LASTEXITCODE"}
+        & $kPath border-width $config.border_width|Out-Null;if($LASTEXITCODE){throw "Komorebi border width refresh failed: $LASTEXITCODE"}
+        & $kPath border-offset -- $config.border_offset|Out-Null;if($LASTEXITCODE){throw "Komorebi border offset refresh failed: $LASTEXITCODE"}
+        & $kPath border-style $config.border_style.ToLowerInvariant()|Out-Null;if($LASTEXITCODE){throw "Komorebi border style refresh failed: $LASTEXITCODE"}
+        foreach($pair in ([ordered]@{single=$config.border_colours.single;stack=$config.border_colours.stack;monocle=$config.border_colours.monocle;floating=$config.border_colours.floating;unfocused=$config.border_colours.unfocused;'unfocused-locked'=$config.border_colours.unfocused_locked}).GetEnumerator()){$rgb=Convert-HexToRgb $pair.Value;& $kPath border-colour $rgb.R $rgb.G $rgb.B --window-kind $pair.Key|Out-Null;if($LASTEXITCODE){throw "Komorebi $($pair.Key) border refresh failed: $LASTEXITCODE"}}
+    }
+    $y=Get-Command yasbc.exe -ErrorAction SilentlyContinue;if(-not$y){$p=Join-Path $env:ProgramFiles 'YASB\yasbc.exe';if(Test-Path -LiteralPath $p){$y=Get-Item $p}};if($y-and(Get-Process yasb -ErrorAction SilentlyContinue)){Start-Sleep -Milliseconds 250;$yPath=if($y-is[IO.FileInfo]){$y.FullName}else{$y.Source};& $yPath reload|Out-Null;if($LASTEXITCODE){throw "YASB reload failed: $LASTEXITCODE"}}
+}
 function Backup-Targets { param($Targets,[string]$Root)$backup=Join-Path $Root 'backup';New-Item -ItemType Directory -Path $backup -Force|Out-Null;$records=@();foreach($t in $Targets){$r=[ordered]@{name=$t.Name;path=$t.Path;existed=Test-Path -LiteralPath $t.Path;backup=$null};if($r.existed){$r.backup=Join-Path $backup ($t.Name+'.txt');Copy-Item -LiteralPath $t.Path -Destination $r.backup -Force};$records+=[pscustomobject]$r};$records }
 function Restore-Records { param($Records)foreach($r in $Records){if($r.existed-and$r.backup-and(Test-Path -LiteralPath $r.backup)){Copy-Item -LiteralPath $r.backup -Destination $r.path -Force}elseif(Test-Path -LiteralPath $r.path){Remove-Item -LiteralPath $r.path -Force}} }
 function Save-AppliedTargets { param($Targets,[string]$Root)$applied=Join-Path $Root 'applied';New-Item -ItemType Directory -Path $applied -Force|Out-Null;$records=@();foreach($t in $Targets){$stored=Join-Path $applied ($t.Name+'.txt');Copy-Item -LiteralPath $t.Path -Destination $stored -Force;$records+=[ordered]@{name=$t.Name;path=$t.Path;stored=$stored}};$records }
@@ -190,7 +269,7 @@ function Invoke-ThemeApply {
     param($Theme,$Paths,[switch]$NoReload,[switch]$NoSystemAccent,[string]$RequestId)
     $id=(Get-Date -Format 'yyyyMMdd-HHmmss')+'-'+[guid]::NewGuid().ToString('N').Substring(0,8);$root=Join-Path $Paths.TransactionRoot $id;New-Item -ItemType Directory -Path $root -Force|Out-Null;$targets=Get-ThemeTargets $Paths $Theme $root;$records=Backup-Targets $targets $root;$dwm=if($NoSystemAccent){$null}else{Get-DwmSnapshot}
     Write-JsonFile ([ordered]@{schemaVersion=1;transactionId=$id;state='applying';requestId=$RequestId;startedAt=(Get-Date).ToUniversalTime().ToString('o');records=$records;dwm=$dwm}) (Join-Path $root 'journal.json')
-    try{foreach($t in $targets){Write-AtomicText $t.Path ([IO.File]::ReadAllText($t.StagePath))};if(-not$NoSystemAccent){Set-DwmTheme $Theme};Invoke-ThemeReload $Paths -NoReload:$NoReload;$applied=Save-AppliedTargets $targets $root;$fallback=$false;if($Theme.PSObject.Properties.Name-contains'fallback'){$fallback=[bool]$Theme.fallback};$active=[ordered]@{schemaVersion=1;transactionId=$id;wallpaper=$Theme.wallpaper;wallpaperHash=$Theme.wallpaperHash;mode=$Theme.mode;fallback=$fallback;appliedAt=(Get-Date).ToUniversalTime().ToString('o');roles=$Theme.roles;contrastResults=$Theme.contrastResults;files=$applied;dwm=if($NoSystemAccent){$null}else{Get-DwmSnapshot}};Write-JsonFile $active $Paths.ActivePath;if(-not$fallback){Write-JsonFile $active $Paths.LastGoodPath};Write-JsonFile $active (Join-Path $root 'committed.json');Remove-Item -LiteralPath (Join-Path $root 'journal.json') -Force;Remove-OldTransactions $Paths;Write-ThemeLog $Paths info theme-committed "Committed $($Theme.mode) theme." $id;$active}
+    try{foreach($t in $targets){Write-AtomicText $t.Path ([IO.File]::ReadAllText($t.StagePath))};if(-not$NoSystemAccent){Set-DwmTheme $Theme};Invoke-ThemeReload $Paths -NoReload:$NoReload;$applied=Save-AppliedTargets $targets $root;$fallback=$false;if($Theme.PSObject.Properties.Name-contains'fallback'){$fallback=[bool]$Theme.fallback};$active=[ordered]@{schemaVersion=$script:SchemaVersion;transactionId=$id;wallpaper=$Theme.wallpaper;wallpaperHash=$Theme.wallpaperHash;mode=$Theme.mode;fallback=$fallback;appliedAt=(Get-Date).ToUniversalTime().ToString('o');roles=$Theme.roles;contrastResults=$Theme.contrastResults;files=$applied;dwm=if($NoSystemAccent){$null}else{Get-DwmSnapshot}};Write-JsonFile $active $Paths.ActivePath;if(-not$fallback){Write-JsonFile $active $Paths.LastGoodPath};Write-JsonFile $active (Join-Path $root 'committed.json');Remove-Item -LiteralPath (Join-Path $root 'journal.json') -Force;Remove-OldTransactions $Paths;Write-ThemeLog $Paths info theme-committed "Committed $($Theme.mode) theme." $id;$active}
     catch{Restore-Records $records;if(-not$NoSystemAccent-and$dwm){Restore-DwmSnapshot $dwm};try{Invoke-ThemeReload $Paths -NoReload:$NoReload}catch{};Write-ThemeLog $Paths error theme-rollback $_.Exception.Message $id;throw}
 }
 
@@ -206,7 +285,7 @@ function Invoke-AdaptiveTheme {
         if($Mode-eq'RestoreLastGood'){return Restore-LastGoodTheme $paths -NoReload:$NoReload -NoSystemAccent:$NoSystemAccent}
         if($Mode-eq'ApplySafe'){$theme=Get-SafeTheme $paths;$theme|Add-Member NoteProperty fallback $true -Force;return Invoke-ThemeApply $theme $paths -NoReload:$NoReload -NoSystemAccent:$NoSystemAccent -RequestId $request}
         if(-not$Image){throw 'Image is required for Apply and Generate.'};$resolved=(Resolve-Path -LiteralPath $Image).Path;$hash=(Get-FileHash -LiteralPath $resolved -Algorithm SHA256).Hash.ToLowerInvariant();$cache=Join-Path $paths.CacheRoot $hash;New-Item -ItemType Directory -Path $cache -Force|Out-Null;$palette=Join-Path $cache 'palette.json'
-        try{if(Test-Path -LiteralPath $palette){$theme=Get-Content -LiteralPath $palette -Raw|ConvertFrom-Json}else{$theme=New-WallpaperTheme $resolved;Write-JsonFile $theme $palette}}catch{if($Mode-eq'Generate'){throw};Write-ThemeLog $paths warning palette-fallback $_.Exception.Message $null;$theme=Get-SafeTheme $paths;$theme.wallpaper=$resolved;$theme.wallpaperHash=$hash;$theme|Add-Member NoteProperty fallback $true -Force}
+        try{$theme=$null;if(Test-Path -LiteralPath $palette){$cached=Get-Content -LiteralPath $palette -Raw|ConvertFrom-Json;if([int]$cached.schemaVersion-eq$script:SchemaVersion-and$cached.roles.PSObject.Properties.Name-contains'accent2'){$theme=$cached}};if($null-eq$theme){$theme=New-WallpaperTheme $resolved;Write-JsonFile $theme $palette}}catch{if($Mode-eq'Generate'){throw};Write-ThemeLog $paths warning palette-fallback $_.Exception.Message $null;$theme=Get-SafeTheme $paths;$theme.wallpaper=$resolved;$theme.wallpaperHash=$hash;$theme|Add-Member NoteProperty fallback $true -Force}
         if($Mode-eq'Generate'){return $theme};$latest=Get-Content -LiteralPath $paths.LatestRequestPath -Raw|ConvertFrom-Json;if($latest.requestId-ne$request){return [pscustomobject]@{Skipped=$true;Reason='Superseded by a newer wallpaper request.'}};Invoke-ThemeApply $theme $paths -NoReload:$NoReload -NoSystemAccent:$NoSystemAccent -RequestId $request
     }finally{if($locked){$mutex.ReleaseMutex()};$mutex.Dispose()}
 }
