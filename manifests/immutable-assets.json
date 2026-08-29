@@ -19,6 +19,11 @@
       "sha256": "32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51"
     },
     {
+      "component": "equalizerapo", "version": "1.4.2", "file": "EqualizerAPO-x64-1.4.2.exe",
+      "url": "https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download",
+      "sha256": "7403BE7427BBE1936A40DDED082829B6E217FC4F5990FEE5CBA501F0AE055AFA"
+    },
+    {
       "component": "wallpapers", "version": "c5e1780c29adca428dc4ca2d970bd1a6a09f18f3",
       "repository": "JaKooLit/Wallpaper-Bank", "directory": "wallpapers",
       "treeApiUrl": "https://api.github.com/repos/JaKooLit/Wallpaper-Bank/git/trees/c5e1780c29adca428dc4ca2d970bd1a6a09f18f3?recursive=1",

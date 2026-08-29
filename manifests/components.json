@@ -4,7 +4,7 @@
     "ordinaryPackages": "skip-capable-or-install-latest-stable",
     "automaticUpgrades": false,
     "allowPrerelease": false,
-    "immutableExceptions": ["yasb", "dwmblurglass", "wallpapers"]
+    "immutableExceptions": ["yasb", "equalizerapo", "dwmblurglass", "wallpapers"]
   },
   "platform": { "minimumBuild": 22000, "architecture": "x64", "requiresAdministrator": true },
   "components": [
@@ -42,6 +42,12 @@
       "versionCommand": { "arguments": ["--version"], "pattern": "wezterm ([^ ]+)" }
     },
     {
+      "id": "brave", "required": true, "installStrategy": "winget-stable", "packageId": "Brave.Brave",
+      "commands": ["brave.exe"], "detectionPaths": ["%ProgramFiles%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe", "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\Application\\brave.exe"],
+      "minimumCapability": "stable Windows browser for the main-modifier+B shortcut", "healthCheck": "Brave executable and installed package",
+      "versionCommand": { "arguments": ["--version"], "pattern": "Brave ([0-9.]+)" }
+    },
+    {
       "id": "oh-my-posh", "required": true, "installStrategy": "winget-stable", "packageId": "JanDeDobbeleer.OhMyPosh",
       "commands": ["oh-my-posh.exe"], "detectionPaths": ["%LOCALAPPDATA%\\Programs\\oh-my-posh\\bin\\oh-my-posh.exe"],
       "minimumCapability": "stable PowerShell init", "healthCheck": "oh-my-posh version",
@@ -56,6 +62,18 @@
       "id": "cava", "required": true, "installStrategy": "winget-stable", "packageId": "karlstav.cava",
       "commands": ["cava.exe"], "detectionPaths": ["%LOCALAPPDATA%\\cava\\cava.exe"], "minimumCapability": "Windows audio capture build", "healthCheck": "cava --version",
       "versionCommand": { "arguments": ["--version"], "pattern": "([0-9]+\\.[0-9.]+)" }
+    },
+    {
+      "id": "equalizerapo", "required": true, "installStrategy": "immutable-exe",
+      "displayName": "Equalizer APO", "commands": ["Editor.exe", "Configurator.exe"],
+      "detectionPaths": ["%ProgramFiles%\\EqualizerAPO\\Editor.exe", "%ProgramFiles%\\EqualizerAPO\\Configurator.exe"],
+      "minimumCapability": "pinned x64 system-wide APO with managed gain policy", "healthCheck": "editor executable and canonical config",
+      "asset": {
+        "version": "1.4.2", "file": "EqualizerAPO-x64-1.4.2.exe",
+        "url": "https://sourceforge.net/projects/equalizerapo/files/1.4.2/EqualizerAPO-x64-1.4.2.exe/download",
+        "sha256": "7403BE7427BBE1936A40DDED082829B6E217FC4F5990FEE5CBA501F0AE055AFA",
+        "silentArguments": ["/S"]
+      }
     },
     {
       "id": "dwmblurglass", "required": true, "installStrategy": "guarded-dwm",

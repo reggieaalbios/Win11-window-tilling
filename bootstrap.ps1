@@ -100,7 +100,7 @@ try {
     $sourceDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Directory)
     if ($sourceDirectories.Count -ne 1) { throw "Downloaded snapshot is invalid: expected one source directory, found $($sourceDirectories.Count)." }
     $sourceRoot = $sourceDirectories[0].FullName
-    foreach ($required in @('install.ps1','uninstall.ps1','src\Win11WindowTiling.psm1','manifests\components.json','manifests\immutable-assets.json','scripts\render-config.ps1','scripts\dwmblurglass-deploy.ps1','config\komorebi','config\yasb','config\theme-engine','config\dwmblurglass','config\wezterm','config\ohmyposh','config\powershell','wallpapers')) {
+    foreach ($required in @('install.ps1','uninstall.ps1','src\Win11WindowTiling.psm1','manifests\components.json','manifests\immutable-assets.json','scripts\render-config.ps1','scripts\dwmblurglass-deploy.ps1','config\komorebi','config\yasb','config\theme-engine','config\dwmblurglass','config\equalizerapo','config\wezterm','config\ohmyposh','config\powershell','wallpapers')) {
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $required))) { throw "Downloaded snapshot is invalid: missing $required" }
     }
     try { $null = Get-Content -LiteralPath (Join-Path $sourceRoot 'manifests\components.json') -Raw | ConvertFrom-Json }

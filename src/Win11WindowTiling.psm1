@@ -122,6 +122,94 @@ public static extern bool SystemParametersInfo(int action, int parameter, string
     }
 }
 
+function Send-WwtExplorerSettingsRefresh {
+    if (-not ('Wwt.ExplorerNativeMethods' -as [type])) {
+        Add-Type -Namespace Wwt -Name ExplorerNativeMethods -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern System.IntPtr SendMessageTimeout(System.IntPtr window, uint message, System.IntPtr wParam, string lParam, uint flags, uint timeout, out System.IntPtr result);
+'@
+    }
+    $result = [IntPtr]::Zero
+    [void][Wwt.ExplorerNativeMethods]::SendMessageTimeout([IntPtr]0xffff,0x001A,[IntPtr]::Zero,'ShellState',2,1000,[ref]$result)
+}
+
+function Switch-WwtDesktopIcons {
+    if (-not ('Wwt.DesktopNativeMethods' -as [type])) {
+        Add-Type -Namespace Wwt -Name DesktopNativeMethods -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr FindWindow(string className, string windowName);
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern System.IntPtr FindWindowEx(System.IntPtr parent, System.IntPtr after, string className, string windowName);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool EnumWindows(EnumWindowProc callback, System.IntPtr parameter);
+[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+public static extern System.IntPtr SendMessage(System.IntPtr window, uint message, System.IntPtr wParam, System.IntPtr lParam);
+[System.Runtime.InteropServices.DllImport("user32.dll")]
+public static extern bool ShowWindow(System.IntPtr window, int command);
+public delegate bool EnumWindowProc(System.IntPtr window, System.IntPtr parameter);
+public static System.IntPtr FindDesktopHost() {
+    System.IntPtr programManager = FindWindow("Progman", null);
+    if (programManager != System.IntPtr.Zero && FindWindowEx(programManager, System.IntPtr.Zero, "SHELLDLL_DefView", null) != System.IntPtr.Zero) return programManager;
+    System.IntPtr host = System.IntPtr.Zero;
+    EnumWindows(delegate(System.IntPtr window, System.IntPtr parameter) {
+        if (FindWindowEx(window, System.IntPtr.Zero, "SHELLDLL_DefView", null) != System.IntPtr.Zero) { host = window; return false; }
+        return true;
+    }, System.IntPtr.Zero);
+    return host;
+}
+public static System.IntPtr FindDesktopListView() {
+    System.IntPtr host = FindDesktopHost();
+    if (host == System.IntPtr.Zero) return System.IntPtr.Zero;
+    System.IntPtr view = FindWindowEx(host, System.IntPtr.Zero, "SHELLDLL_DefView", null);
+    if (view == System.IntPtr.Zero) return System.IntPtr.Zero;
+    return FindWindowEx(view, System.IntPtr.Zero, "SysListView32", "FolderView");
+}
+'@
+    }
+    $desktopHost = [Wwt.DesktopNativeMethods]::FindDesktopHost()
+    if ($desktopHost -eq [IntPtr]::Zero) { throw 'Explorer desktop window was not found.' }
+    [void][Wwt.DesktopNativeMethods]::SendMessage($desktopHost,0x0111,[IntPtr]0x7402,[IntPtr]::Zero)
+}
+
+function Set-WwtDesktopIconsVisible {
+    param([bool]$Visible)
+    if (-not ('Wwt.DesktopNativeMethods' -as [type])) { Switch-WwtDesktopIcons; Switch-WwtDesktopIcons }
+    $listView = [Wwt.DesktopNativeMethods]::FindDesktopListView()
+    if ($listView -eq [IntPtr]::Zero) { throw 'Explorer desktop icon list was not found.' }
+    $showCommand = if ($Visible) { 5 } else { 0 }
+    [void][Wwt.DesktopNativeMethods]::ShowWindow($listView,$showCommand)
+}
+
+function Install-WwtDesktopIconPreference {
+    param($ExistingRecord)
+    $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced'
+    $currentItem = Get-ItemProperty -LiteralPath $key -Name HideIcons -ErrorAction SilentlyContinue
+    if ($null -ne $ExistingRecord) {
+        $previouslyPresent = [bool]$ExistingRecord.previouslyPresent
+        $previousValue = $ExistingRecord.previousValue
+    } else {
+        $item = Get-ItemProperty -LiteralPath $key -Name HideIcons -ErrorAction SilentlyContinue
+        $previouslyPresent = $null -ne $item
+        $previousValue = if ($item) { [int]$item.HideIcons } else { $null }
+    }
+    if (-not (Test-Path -LiteralPath $key)) { New-Item -Path $key -Force | Out-Null }
+    Set-WwtDesktopIconsVisible -Visible $false
+    Set-ItemProperty -LiteralPath $key -Name HideIcons -Type DWord -Value 1
+    Send-WwtExplorerSettingsRefresh
+    [pscustomobject][ordered]@{ key=$key; name='HideIcons'; previouslyPresent=$previouslyPresent; previousValue=$previousValue }
+}
+
+function Uninstall-WwtDesktopIconPreference {
+    param([Parameter(Mandatory)]$Record)
+    if ($Record.previouslyPresent) {
+        Set-ItemProperty -LiteralPath $Record.key -Name $Record.name -Type DWord -Value ([int]$Record.previousValue)
+    } else {
+        Remove-ItemProperty -LiteralPath $Record.key -Name $Record.name -ErrorAction SilentlyContinue
+    }
+    Set-WwtDesktopIconsVisible -Visible (-not [bool]$Record.previouslyPresent -or [int]$Record.previousValue -ne 1)
+    Send-WwtExplorerSettingsRefresh
+}
+
 function Read-WwtManifest {
     param([Parameter(Mandatory)][string]$RepositoryRoot)
     $path = Join-Path $RepositoryRoot 'manifests\components.json'
@@ -194,6 +282,13 @@ function Get-WwtHealth {
     if ($komorebiHealthy) {
         $komorebiText = Get-Content -LiteralPath $komorebiConfig -Raw
         $komorebiHealthy = ($komorebiText -notmatch '{{[A-Z0-9_]+}}') -and ($komorebiText -notmatch '\$Env:KOMOREBI_CONFIG_HOME')
+        if ($komorebiHealthy) {
+            try {
+                $komorebiObject = $komorebiText | ConvertFrom-Json
+                $workspaces = @($komorebiObject.monitors[0].workspaces)
+                $komorebiHealthy = $workspaces.Count -gt 0 -and @($workspaces | Where-Object layout -ne 'Grid').Count -eq 0
+            } catch { $komorebiHealthy = $false }
+        }
     }
     $results.Add([pscustomobject]@{ Name='komorebi-config'; Healthy=$komorebiHealthy; Required=$true; Detail=$komorebiConfig })
     $yasbConfig = Join-Path $env:USERPROFILE '.config\yasb\config.yaml'
@@ -203,6 +298,34 @@ function Get-WwtHealth {
         $yasbHealthy = ($yasbText -notmatch '{{[A-Z0-9_]+}}') -and ($yasbText -notmatch 'data_path:\s*"[A-Za-z]:\\')
     }
     $results.Add([pscustomobject]@{ Name='yasb-config'; Healthy=$yasbHealthy; Required=$true; Detail=$yasbConfig })
+    $managedUserFiles = [ordered]@{
+        'autohotkey-config' = Join-Path $env:USERPROFILE '.config\komorebi\komorebi.ahk'
+        'theme-engine-config' = Join-Path $env:USERPROFILE '.config\theme-engine\AdaptiveTheme.psm1'
+        'wezterm-config' = Join-Path $env:USERPROFILE '.wezterm.lua'
+        'wezterm-theme' = Join-Path $env:USERPROFILE 'wwt-theme.lua'
+        'ohmyposh-config' = Join-Path $env:USERPROFILE '.config\ohmyposh\catppuccin_mocha.omp.json'
+    }
+    foreach ($managedFile in $managedUserFiles.GetEnumerator()) {
+        $healthy = Test-Path -LiteralPath $managedFile.Value
+        if ($healthy) {
+            $text = Get-Content -LiteralPath $managedFile.Value -Raw
+            $healthy = $text -notmatch '{{[A-Z0-9_]+}}'
+            if ($healthy -and $managedFile.Key -eq 'ohmyposh-config') {
+                try {
+                    $prompt = $text | ConvertFrom-Json
+                    $healthy = @('blue','lavender','pink','green','yellow','red','background','surface','border' | Where-Object {
+                        -not ($prompt.palette.PSObject.Properties.Name -contains $_)
+                    }).Count -eq 0
+                } catch { $healthy = $false }
+            }
+        }
+        $results.Add([pscustomobject]@{ Name=$managedFile.Key; Healthy=$healthy; Required=$true; Detail=$managedFile.Value })
+    }
+    $equalizerSource = Join-Path $RepositoryRoot 'config\equalizerapo\config.txt'
+    $equalizerConfig = Join-Path $env:ProgramFiles 'EqualizerAPO\config\config.txt'
+    $equalizerConfigHealthy = (Test-Path -LiteralPath $equalizerSource) -and (Test-Path -LiteralPath $equalizerConfig) -and
+        ((Get-FileHash -LiteralPath $equalizerSource -Algorithm SHA256).Hash -eq (Get-FileHash -LiteralPath $equalizerConfig -Algorithm SHA256).Hash)
+    $results.Add([pscustomobject]@{ Name='equalizerapo-config'; Healthy=$equalizerConfigHealthy; Required=$true; Detail=$equalizerConfig })
     return $results
 }
 
@@ -388,6 +511,16 @@ function Install-WwtConfiguration {
         Copy-WwtManagedFile -Source $file.FullName -Destination $destination -BackupRoot $backupRoot -Records $records -ExistingRecord $priorRecord
     }
 
+    # The APO engine is machine-wide, but audio endpoint selection is local to
+    # each PC. Deploy only portable policy; never record endpoint GUIDs.
+    $equalizerConfigRoot = Join-Path $env:ProgramFiles 'EqualizerAPO\config'
+    foreach ($name in @('config.txt','policy.json')) {
+        $source = Join-Path $RepositoryRoot "config\equalizerapo\$name"
+        $destination = Join-Path $equalizerConfigRoot $name
+        $priorRecord = if ($existingFiles.ContainsKey($destination)) { $existingFiles[$destination] } else { $null }
+        Copy-WwtManagedFile -Source $source -Destination $destination -BackupRoot $backupRoot -Records $records -ExistingRecord $priorRecord
+    }
+
     # Reproduce the repository's canonical purple desktop on the first run.
     # Seed the exact palette so fresh machines do not vary with image decoder,
     # clustering, or cached-theme history, then let the normal theme engine
@@ -408,6 +541,8 @@ function Install-WwtConfiguration {
     $themeProcess = Start-Process powershell.exe -ArgumentList $themeArguments -Wait -PassThru -WindowStyle Hidden
     if ($themeProcess.ExitCode -ne 0) { throw "Default adaptive theme failed with exit code $($themeProcess.ExitCode)." }
     Set-WwtDesktopWallpaper -Path $defaultWallpaper
+    $priorDesktopIcons = if ($null -ne $existingState -and $existingState.PSObject.Properties.Name -contains 'desktopIcons') { $existingState.desktopIcons } else { $null }
+    $desktopIcons = Install-WwtDesktopIconPreference -ExistingRecord $priorDesktopIcons
 
     # The theme engine intentionally rewrites managed outputs. Record their
     # final hashes, not the intermediate render, so uninstall removes them.
@@ -422,7 +557,7 @@ function Install-WwtConfiguration {
     $startup = Install-WwtStartupOwnership -RepositoryRoot $RepositoryRoot -ExistingRecord $priorStartup
     Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $OperationMode -Step startup-owned -OperationId $operationId | Out-Null
     $installedAt = if ($null -ne $existingState -and $existingState.PSObject.Properties.Name -contains 'installedAt') { $existingState.installedAt } else { (Get-Date).ToString('o') }
-    $state = [ordered]@{ schemaVersion=2; snapshotCommit=$SnapshotCommit; snapshotSha256=$SnapshotSha256; installedAt=$installedAt; updatedAt=(Get-Date).ToString('o'); repositoryRoot=$RepositoryRoot; mainModifier=$MainModifier; files=$records; startup=$startup }
+    $state = [ordered]@{ schemaVersion=2; snapshotCommit=$SnapshotCommit; snapshotSha256=$SnapshotSha256; installedAt=$installedAt; updatedAt=(Get-Date).ToString('o'); repositoryRoot=$RepositoryRoot; mainModifier=$MainModifier; files=$records; startup=$startup; desktopIcons=$desktopIcons }
     Write-WwtJson -Value $state -Path $paths.StatePath
     Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $OperationMode -Step complete -Status complete -OperationId $operationId | Out-Null
     [pscustomobject]@{ Mode=$OperationMode; Applied=$true; State=$paths.StatePath; Files=$records.Count }
@@ -434,10 +569,23 @@ function Uninstall-WwtConfiguration {
     if (-not (Test-Path -LiteralPath $paths.StatePath)) { return [pscustomobject]@{ Mode='Uninstall'; Applied=$false; Message='No installation state exists.' } }
     $state = Get-Content -LiteralPath $paths.StatePath -Raw | ConvertFrom-Json
     if (-not $Apply) { return [pscustomobject]@{ Mode='Uninstall'; Applied=$false; Files=@($state.files).Count; Message='Uninstall preview only.' } }
+    $themeManagedPaths = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($themeManagedPath in @(
+        (Join-Path $env:USERPROFILE '.config\yasb\styles.theme.css'),
+        (Join-Path $env:USERPROFILE '.config\yasb\styles.css'),
+        (Join-Path $env:USERPROFILE '.config\yasb\config.yaml'),
+        (Join-Path $env:USERPROFILE '.config\komorebi\komorebi.json'),
+        (Join-Path $env:USERPROFILE '.wezterm.lua'),
+        (Join-Path $env:USERPROFILE 'wwt-theme.lua'),
+        (Join-Path $env:USERPROFILE '.config\ohmyposh\catppuccin_mocha.omp.json')
+    )) { [void]$themeManagedPaths.Add($themeManagedPath) }
+    foreach ($iconName in @('windows-logo.svg','cpu-neon.svg','ram-neon.svg','download-neon.svg','upload-neon.svg','volume-minimal.svg')) {
+        [void]$themeManagedPaths.Add((Join-Path $env:USERPROFILE ".config\yasb\assets\$iconName"))
+    }
     foreach ($record in @($state.files)) {
         if (-not (Test-Path -LiteralPath $record.destination)) { continue }
         $currentHash = (Get-FileHash -LiteralPath $record.destination -Algorithm SHA256).Hash
-        if ($currentHash -ne $record.installedHash) { continue }
+        if ($currentHash -ne $record.installedHash -and -not $themeManagedPaths.Contains([string]$record.destination)) { continue }
         Remove-Item -LiteralPath $record.destination -Force
         if ($record.backup -and (Test-Path -LiteralPath $record.backup)) {
             New-Item -ItemType Directory -Path (Split-Path -Parent $record.destination) -Force | Out-Null
@@ -446,6 +594,9 @@ function Uninstall-WwtConfiguration {
     }
     if ($state.PSObject.Properties.Name -contains 'startup' -and $state.startup) {
         Uninstall-WwtStartupOwnership -Record $state.startup
+    }
+    if ($state.PSObject.Properties.Name -contains 'desktopIcons' -and $state.desktopIcons) {
+        Uninstall-WwtDesktopIconPreference -Record $state.desktopIcons
     }
     Remove-Item -LiteralPath $paths.StatePath -Force
     [pscustomobject]@{ Mode='Uninstall'; Applied=$true; Message='Managed unchanged files removed; recorded originals restored.' }
@@ -470,6 +621,7 @@ function Get-WwtComponentInventory {
         if ($found -and -not $version -and $component.id -eq 'dwmblurglass') {
             try { $version = [string](Get-Item -LiteralPath $found).VersionInfo.ProductVersion } catch { $version = $null }
         }
+        if ($found -and $component.id -eq 'equalizerapo') { $version = Get-WwtRegisteredDisplayVersion -DisplayName 'Equalizer APO' }
         $capable = [bool]$found
         if ($component.id -eq 'autohotkey' -and $found) { $capable = Test-WwtAutoHotkeyV2 -Path $found -Version $version }
         if ($component.id -eq 'yasb' -and $found) {
@@ -487,6 +639,9 @@ function Get-WwtComponentInventory {
                 ((Get-FileHash -LiteralPath $expectedConfiguration -Algorithm SHA256).Hash -eq
                     (Get-FileHash -LiteralPath $installedConfiguration -Algorithm SHA256).Hash)
             $capable = [bool]$task -and (Test-Path -LiteralPath $state) -and $configurationMatches
+        }
+        if ($component.id -eq 'equalizerapo' -and $found) {
+            $capable = [bool]$version -and $version.StartsWith(([string]$component.asset.version),[StringComparison]::OrdinalIgnoreCase)
         }
         if ($component.installStrategy -eq 'bundled-config') {
             $capable = @($paths).Count -gt 0 -and @($paths | Where-Object {
@@ -515,6 +670,21 @@ function Get-WwtMsiRecoverySource {
         $properties = Get-ItemProperty (Join-Path $product.PSPath 'InstallProperties') -ErrorAction SilentlyContinue
         if ($properties.DisplayName -eq $DisplayName -and $properties.LocalPackage -and (Test-Path -LiteralPath $properties.LocalPackage)) {
             return [pscustomobject]@{ Path=[string]$properties.LocalPackage; Version=[string]$properties.DisplayVersion; SHA256=(Get-FileHash -LiteralPath $properties.LocalPackage -Algorithm SHA256).Hash }
+        }
+    }
+    return $null
+}
+
+function Get-WwtRegisteredDisplayVersion {
+    param([Parameter(Mandatory)][string]$DisplayName)
+    foreach ($root in @(
+        'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
+        'HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall'
+    )) {
+        foreach ($key in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
+            $record = Get-ItemProperty -LiteralPath $key.PSPath -ErrorAction SilentlyContinue
+            if ($record -and [string]$record.DisplayName -like "$DisplayName*") { return [string]$record.DisplayVersion }
         }
     }
     return $null
@@ -639,6 +809,7 @@ function Install-WwtMissingDependencies {
     foreach ($component in @($manifest.components)) {
         $current = @($inventory | Where-Object id -eq $component.id)[0]
         if ($component.installStrategy -eq 'guarded-dwm' -and $current.capable) { continue }
+        if ($component.id -eq 'equalizerapo' -and $current.capable) { continue }
         if (-not $ReinstallAll -and $current.capable) { continue }
         if ($component.installStrategy -eq 'winget-stable') {
             if (-not $winget) { throw "WinGet is required to install '$($component.id)'." }
@@ -658,6 +829,19 @@ function Install-WwtMissingDependencies {
                 $marker = [ordered]@{ assetSha256=[string]$component.asset.sha256; version=[string]$component.asset.version } | ConvertTo-Json -Compress
                 [IO.File]::WriteAllText((Join-Path $env:ProgramFiles 'YASB\wwt-build.json'),$marker,(New-Object Text.UTF8Encoding($false)))
             }
+        } elseif ($component.installStrategy -eq 'immutable-exe') {
+            $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
+            $file = Join-Path $paths.ArtifactRoot ([string]$component.asset.file)
+            New-Item -ItemType Directory -Path $paths.ArtifactRoot -Force | Out-Null
+            if (-not (Test-Path -LiteralPath $file) -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne [string]$component.asset.sha256) {
+                $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+                if (-not $curl) { throw "curl.exe is required to download '$($component.id)' from SourceForge." }
+                & $curl.Source @('-L','--fail','--retry','3','--output',$file,[string]$component.asset.url)
+                if ($LASTEXITCODE -ne 0) { throw "Download failed for '$($component.id)' with exit $LASTEXITCODE." }
+            }
+            if ((Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne [string]$component.asset.sha256) { throw "Hash mismatch for '$($component.id)'." }
+            $process = Start-Process -FilePath $file -ArgumentList @($component.asset.silentArguments) -Wait -PassThru
+            if ($process.ExitCode -notin @(0,1641,3010)) { throw "Installer failed for '$($component.id)' with exit $($process.ExitCode)." }
         } elseif ($component.installStrategy -eq 'guarded-dwm') {
             $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
             $mapping = @($component.compatibility | Where-Object { [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber -ge [int]$_.minimumBuild -and [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber -le [int]$_.maximumBuild })[0]
@@ -681,6 +865,7 @@ function Uninstall-WwtDependencies {
     for ($index = @($components).Count - 1; $index -ge 0; $index--) {
         $component = $components[$index]
         if ($PreserveGuardedDwm -and $component.installStrategy -eq 'guarded-dwm') { continue }
+        if ($PreserveGuardedDwm -and $component.id -eq 'equalizerapo') { continue }
 
         # Kill the component again immediately before invoking its uninstaller.
         # This closes helpers that were started after the initial uninstall purge
@@ -709,6 +894,11 @@ function Uninstall-WwtDependencies {
             Start-Process -FilePath $winget.Source -ArgumentList @('uninstall','--id',$component.packageId,'--exact','--silent','--disable-interactivity') -Wait -PassThru -NoNewWindow | Out-Null
         } elseif ($component.id -eq 'yasb' -and $component.productCode) {
             Start-Process msiexec.exe -ArgumentList @('/x',$component.productCode,'/qn','/norestart') -Wait -PassThru | Out-Null
+        } elseif ($component.id -eq 'equalizerapo') {
+            $uninstaller = Join-Path $env:ProgramFiles 'EqualizerAPO\Uninstall.exe'
+            if (Test-Path -LiteralPath $uninstaller) {
+                Start-Process -FilePath $uninstaller -ArgumentList @('/S') -Wait -PassThru | Out-Null
+            }
         } elseif ($component.id -eq 'dwmblurglass') {
             $state = Join-Path (Get-WwtPaths $RepositoryRoot).ProductRoot 'dwmblurglass-state.json'
             if (Test-Path $state) {

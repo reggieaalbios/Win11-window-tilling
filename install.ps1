@@ -287,6 +287,23 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
             } else { throw "Cannot prepare the exact previous installer for '$($component.id)'." }
         }
     }
+    foreach ($component in @($manifest.components | Where-Object installStrategy -eq 'immutable-exe')) {
+        $destination = Join-Path $newRoot $component.asset.file
+        $curl = Get-Command curl.exe -ErrorAction SilentlyContinue
+        if (-not $curl) { throw "curl.exe is required to download '$($component.id)' from SourceForge." }
+        & $curl.Source @('-L','--fail','--retry','3','--output',$destination,[string]$component.asset.url)
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $destination)) { throw "Could not prepare immutable installer for '$($component.id)'." }
+        if ((Get-FileHash $destination -Algorithm SHA256).Hash -ne $component.asset.sha256) { throw "Prepared artifact hash mismatch for '$($component.id)'." }
+        New-Item -ItemType Directory -Path $paths.ArtifactRoot -Force | Out-Null
+        Copy-Item -LiteralPath $destination -Destination (Join-Path $paths.ArtifactRoot $component.asset.file) -Force
+        $old = @($Inventory | Where-Object id -eq $component.id)[0]
+        if ($IncludeRecovery -and $old.detected) {
+            if (-not $old.capable) { throw "Cannot prepare the exact previous installer for '$($component.id)'." }
+            $componentRecovery = Join-Path $recoveryRoot $component.id
+            New-Item -ItemType Directory -Path $componentRecovery -Force | Out-Null
+            Copy-Item -LiteralPath $destination -Destination (Join-Path $componentRecovery $component.asset.file) -Force
+        }
+    }
     foreach ($component in @($manifest.components | Where-Object installStrategy -eq 'guarded-dwm')) {
         $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
         $mapping = @($component.compatibility | Where-Object { $build -ge [int]$_.minimumBuild -and $build -le [int]$_.maximumBuild })[0]
@@ -332,7 +349,7 @@ function Restore-WwtRecoveryDependencies([string]$PreparationPath) {
             }
             '.msix' { Add-AppxPackage -Path $artifact.FullName }
             '.exe' {
-                $arguments = if($item.id -eq 'wezterm'){@('/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES')}else{@('/silent')}
+                $arguments = if($item.id -eq 'wezterm'){@('/VERYSILENT','/NORESTART','/SUPPRESSMSGBOXES')}elseif($item.id -eq 'equalizerapo'){@('/S')}else{@('/silent')}
                 $p=Start-Process $artifact.FullName -ArgumentList $arguments -Wait -PassThru
                 if($p.ExitCode -notin @(0,1641,3010)){throw "Recovery executable failed for '$($item.id)'."}
             }

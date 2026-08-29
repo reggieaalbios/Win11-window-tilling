@@ -2,7 +2,7 @@
 
 A keyboard-first Windows 11 desktop stack installed and maintained by PowerShell. The repository is the product: there is no executable installer, product prerelease, or automatic publishing workflow.
 
-The managed stack includes Komorebi, patched YASB, AutoHotkey v2, WezTerm, Oh My Posh, zoxide, CAVA, DWMBlurGlass, adaptive themes, wallpapers, and the portable configuration set in this repository.
+The managed stack includes Komorebi with five Grid-layout workspaces, patched YASB, AutoHotkey v2, WezTerm, Oh My Posh, zoxide, CAVA, DWMBlurGlass, adaptive themes, wallpapers, and the portable configuration set in this repository.
 
 ## Stable install
 
@@ -47,9 +47,9 @@ All source snapshots, caches, state, backups, and JSONL logs remain below `%LOCA
 
 ## Dependency policy
 
-Healthy ordinary dependencies are kept regardless of patch version. Missing or incapable ordinary dependencies receive the current stable WinGet package; the installer never opts into prerelease or nightly sources and Repair does not silently upgrade healthy tools. AutoHotkey must be v2.
+Healthy ordinary dependencies are kept regardless of patch version. Missing or incapable ordinary dependencies receive the current stable WinGet package; the installer never opts into prerelease or nightly sources and Repair does not silently upgrade healthy tools. AutoHotkey must be v2. Equalizer APO is required and installed from a pinned, checksum-verified x64 artifact; playback-device selection stays machine-local. Its managed preamp defaults to +20 dB and enforces that value as its ceiling.
 
-Patched YASB is an immutable, hash-verified dependency asset because upstream lacks WWT's native shortcut and popup coordination patch. DWMBlurGlass is also pinned through a tested Windows-build mapping. Their locks live in `manifests\immutable-assets.json`; ordinary packages are described by identity and capability in `manifests\components.json`.
+Patched YASB is an immutable, hash-verified dependency asset because upstream lacks WWT's native shortcut and popup coordination patch. Equalizer APO and DWMBlurGlass are also pinned (DWM through a tested Windows-build mapping). Their locks live in `manifests\immutable-assets.json`; ordinary packages are described by identity and capability in `manifests\components.json`.
 
 ## Local validation
 

@@ -1,0 +1,8 @@
+# Win11 Window Tiling managed Equalizer APO entrypoint.
+# Select the playback endpoint locally with Configurator.exe. Never commit
+# endpoint names or device GUIDs to this portable configuration.
+#
+# Positive gain can clip. WWT defaults to the requested maximum and clamps it
+# to the policy ceiling. Custom EQ presets should provide negative headroom.
+Eval: wwtRequestedPreampDb = 20
+Preamp: `min(wwtRequestedPreampDb, 20)` dB

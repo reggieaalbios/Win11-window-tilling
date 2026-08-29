@@ -39,14 +39,25 @@ try {
     Assert ($manifest.dependencyPolicy.ordinaryPackages -eq 'skip-capable-or-install-latest-stable') 'Ordinary dependency policy is incorrect.'
     Assert (-not $manifest.dependencyPolicy.allowPrerelease) 'Prerelease dependencies must be disabled.'
     $ordinary = @($manifest.components | Where-Object installStrategy -eq 'winget-stable')
-    Assert ($ordinary.Count -ge 6) 'The ordinary stable dependency set is incomplete.'
+    Assert ($ordinary.Count -ge 7) 'The ordinary stable dependency set is incomplete.'
+    $brave = @($ordinary | Where-Object id -eq 'brave')[0]
+    Assert ($brave.required -and $brave.packageId -eq 'Brave.Brave') 'Brave must be a required managed WinGet dependency.'
     Assert (-not @($ordinary | Where-Object { $_.PSObject.Properties.Name -contains 'version' })) 'Ordinary dependencies must not be exact-version locked.'
-    foreach ($id in @('yasb','dwmblurglass','wallpapers')) {
+    foreach ($id in @('yasb','equalizerapo','dwmblurglass','wallpapers')) {
         Assert (@($manifest.dependencyPolicy.immutableExceptions | Where-Object { $_ -eq $id }).Count -eq 1) "Missing immutable exception: $id"
     }
     $yasb = @($manifest.components | Where-Object id -eq 'yasb')[0]
     $yasbLock = @($immutable.assets | Where-Object component -eq 'yasb')[0]
     Assert ($yasb.asset.url -eq $yasbLock.url -and $yasb.asset.sha256 -eq $yasbLock.sha256) 'YASB manifest and immutable lock disagree.'
+    $equalizer = @($manifest.components | Where-Object id -eq 'equalizerapo')[0]
+    $equalizerLock = @($immutable.assets | Where-Object component -eq 'equalizerapo')[0]
+    Assert ($equalizer.required -and $equalizer.installStrategy -eq 'immutable-exe') 'Equalizer APO must be a required immutable installer.'
+    Assert ($equalizer.asset.url -eq $equalizerLock.url -and $equalizer.asset.sha256 -eq $equalizerLock.sha256) 'Equalizer APO manifest and immutable lock disagree.'
+    $equalizerPolicy = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\equalizerapo\policy.json') -Raw | ConvertFrom-Json
+    Assert ($equalizerPolicy.defaultPreampDb -eq 20 -and $equalizerPolicy.maximumPreampDb -eq 20) 'Equalizer APO gain policy must default to and cap tooling at +20 dB.'
+    Assert ($equalizerPolicy.deviceSelection -eq 'local-only') 'Equalizer APO device identity must remain machine-local.'
+    $equalizerConfig = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\equalizerapo\config.txt') -Raw
+    Assert ($equalizerConfig -match 'wwtRequestedPreampDb = 20' -and $equalizerConfig -match 'min\(wwtRequestedPreampDb, 20\)') 'Equalizer APO must enforce the +20 dB default and ceiling in its active config.'
     $dwm = @($manifest.components | Where-Object id -eq 'dwmblurglass')[0]
     $dwmLock = @($immutable.assets | Where-Object component -eq 'dwmblurglass')[0]
     Assert ($dwm.compatibility[0].url -eq $dwmLock.url -and $dwm.compatibility[0].sha256 -eq $dwmLock.sha256) 'DWMBlurGlass manifest and immutable lock disagree.'
@@ -57,7 +68,7 @@ try {
     Assert (Test-Path -LiteralPath $dwmConfigurationPath) 'Canonical DWMBlurGlass configuration is missing.'
     $dwmConfiguration = Get-Content -LiteralPath $dwmConfigurationPath -Raw
     foreach ($setting in @('applyglobal=true','customAmount=true','disableFramerateLimit=true','extendRound=10','blurAmount=45','customBlurAmount=41','luminosityOpacity=0.62','effectType=2','blurQuality=1')) {
-        Assert ($dwmConfiguration -match "(?m)^$([regex]::Escape($setting))$") "Canonical DWMBlurGlass setting is missing: $setting"
+        Assert ($dwmConfiguration -match "(?m)^$([regex]::Escape($setting))\r?$") "Canonical DWMBlurGlass setting is missing: $setting"
     }
     $dwmDeployText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'scripts\dwmblurglass-deploy.ps1') -Raw
     Assert ($dwmDeployText -match 'ConfigurationPath') 'DWMBlurGlass deployment does not accept the canonical configuration.'
@@ -76,6 +87,7 @@ try {
         $renderedKomorebi = Get-Content -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.json') -Raw
         $renderedShortcuts = Get-Content -LiteralPath (Join-Path $renderRoot '.config\yasb\shortcuts.json') -Raw | ConvertFrom-Json
         $renderedAhk = Get-Content -LiteralPath (Join-Path $renderRoot '.config\komorebi\komorebi.ahk') -Raw
+        Assert ($renderedAhk -match '(?m)^BraveExe := FileExist\(BraveMachineExe\).*BraveSoftware.*brave\.exe' -and $renderedAhk -match '(?m)^b::Run\(''"'' BraveExe ''"''\)$' -and $renderedAhk -notmatch '(?m)^LaunchBrave\(\)') "Browser binding must only launch Brave and leave window management to Komorebi for $modifier."
         $renderedProfile = Get-Content -LiteralPath (Join-Path $renderRoot 'Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1') -Raw
         $renderedWezTermTheme = [IO.File]::ReadAllText((Join-Path $renderRoot 'wwt-theme.lua'))
         $renderedAhkBytes = [IO.File]::ReadAllBytes((Join-Path $renderRoot '.config\komorebi\komorebi.ahk'))
@@ -96,16 +108,29 @@ try {
         Assert ($renderedKomorebi -match '"app_specific_configuration_path": "[A-Za-z]:/.+/.config/komorebi/applications.json"') "Komorebi application config path is not rendered as an absolute path for $modifier."
         Assert ($renderedKomorebi -notmatch '\$Env:KOMOREBI_CONFIG_HOME|{{USER_PROFILE_URI}}') "Komorebi config contains unresolved environment or render tokens for $modifier."
         $komorebiObject = $renderedKomorebi | ConvertFrom-Json
+        $braveManageRules = if ($komorebiObject.PSObject.Properties.Name -contains 'manage_rules') {
+            @($komorebiObject.manage_rules | Where-Object { $_.kind -eq 'Exe' -and $_.id -eq 'brave.exe' })
+        } else { @() }
+        Assert (@($braveManageRules).Count -eq 0) "Komorebi must not force a special Brave manage rule for $modifier."
         Assert (@($komorebiObject.monitors[0].workspaces).Count -eq 5) "Komorebi must render five preconfigured workspaces for $modifier."
+        Assert (@($komorebiObject.monitors[0].workspaces | Where-Object layout -ne 'Grid').Count -eq 0) "Every Komorebi workspace must default to the Grid layout for $modifier."
+        Assert ($renderedAhk -match 'change-layout grid') "The workspace-one guard must preserve the Grid layout for $modifier."
+        if ($modifier -eq 'Caps') {
+            Assert ($renderedAhk -match 'SetCapsLockState\("AlwaysOff"\)' -and $renderedAhk -match '(?m)^\*CapsLock::return$') 'Caps must act only as the Komorebi Super modifier and never toggle CapsLock.'
+        }
         foreach ($workspace in 1..5) {
             $zeroBased = $workspace - 1
-            Assert ($renderedAhk -match "(?m)^$workspace::Komorebic\(`"focus-workspace $zeroBased`"\)") "AHK focus binding is missing for workspace $workspace with $modifier."
+            Assert ($renderedAhk -match "(?m)^$workspace::FocusWorkspace\($zeroBased\)") "AHK focus binding is missing for workspace $workspace with $modifier."
             Assert ($renderedAhk -match "(?m)^\+$workspace::MoveAndFollow\($zeroBased\)") "AHK move-and-follow binding is missing for workspace $workspace with $modifier."
         }
-        Assert ($renderedAhk -notmatch '(?m)^[6-9]::Komorebic\(') "AHK exposes non-canonical workspaces 6-9 for $modifier."
+        Assert ($renderedAhk -notmatch '(?m)^[6-9]::(?:Komorebic|FocusWorkspace)\(') "AHK exposes non-canonical workspaces 6-9 for $modifier."
         Assert ($renderedAhk -notmatch '(?m)^\+[6-9]::MoveAndFollow\(') "AHK exposes non-canonical move bindings 6-9 for $modifier."
-        Assert ($komorebiObject.animation.enabled.movement) "Komorebi movement animation must remain enabled for $modifier."
-        Assert ($renderedAhk -match '(?s)DisableDragAnimation\(\).*?movement enable') "Drag cleanup must restore movement animation for $modifier."
+        Assert ($renderedAhk -match 'ScheduleWorkspaceOneLayoutGuard' -and $renderedAhk -match 'GuardWorkspaceOneLayout' -and $renderedAhk -match 'ExplicitWorkspaceOneMonocle') "Workspace 1 must repair unintended monocle state without blocking the explicit monocle hotkey for $modifier."
+        Assert ($renderedAhk -match 'GuardWorkspaceOneLayoutSecondPass' -and $renderedAhk -match 'GuardWorkspaceOneLayoutFinalPass') "Workspace 1 must remain guarded through delayed browser restore events for $modifier."
+        $workspaceGuardBlock = [regex]::Match($renderedAhk, '(?s)GuardWorkspaceOneLayout\(\)\s*\{.*?\r?\n\}').Value
+        Assert ($workspaceGuardBlock -notmatch 'Komorebic\("retile", false\)') "Workspace switching must not force delayed retiling for $modifier."
+        Assert (-not $komorebiObject.animation.enabled.movement) "Ordinary tiling movement must remain instantaneous for $modifier."
+        Assert ($renderedAhk -match '(?s)DisableDragAnimation\(\).*?movement disable') "Drag cleanup must restore instantaneous tiling for $modifier."
         Assert ($renderedAhk -match '(?m)^\+d::Komorebic\("cycle-move-to-monitor previous"\)') "Shift+D monitor movement differs from the canonical live mapping for $modifier."
         Assert ($renderedAhk -notmatch '(?m)^\^(Left|Up)::') "Non-canonical Ctrl+Left/Up monitor mappings leaked into $modifier."
         Assert (@($renderedShortcuts.sections.items | Where-Object { $_.keys -contains '1-5' }).Count -ge 1) "Shortcut guide does not match the canonical visible workspaces 1-5 for $modifier."
@@ -226,6 +251,7 @@ try {
     Assert ($moduleText -match 'Set-WwtDesktopWallpaper') 'Installation must apply the canonical desktop wallpaper.'
     Assert ($moduleText -match 'default-theme\.json') 'Installation must seed the canonical adaptive-theme palette.'
     Assert ($moduleText -match 'final hashes, not the intermediate render') 'Managed hashes must be refreshed after adaptive-theme generation.'
+    Assert ($moduleText -match 'themeManagedPaths') 'Uninstall must remove owned adaptive-theme outputs after later wallpaper changes.'
     Assert ($moduleText -match "\.config\\ohmyposh'") 'Complete backup and purge targets must include Oh My Posh configuration.'
     Assert ($moduleText -match "'wwt-theme\.lua'") 'Complete backup and purge targets must include the generated WezTerm theme.'
     Assert ($moduleText -match "installStrategy -eq 'bundled-config'") 'Bundled-component health must validate every declared file.'
@@ -235,11 +261,21 @@ try {
     Assert ($moduleText -match 'installStrategy -eq ''guarded-dwm'' -and \$current\.capable') 'Healthy guarded DWM components must be skipped during forced dependency reinstall.'
     Assert ($moduleText -match "@\('install','--id',\`$component\.packageId[\s\S]+?'--force'") 'Missing or broken WinGet packages must be force-reinstalled when stale registration exists.'
     Assert ($moduleText -match 'komorebi-config') 'Doctor must validate the rendered Komorebi config.'
+    Assert ($moduleText -match "Where-Object layout -ne 'Grid'") 'Doctor must detect a Komorebi workspace that drifts from Grid layout.'
     Assert ($moduleText -match 'yasb-config') 'Doctor must validate the rendered YASB config.'
+    foreach ($managedConfigCheck in @('autohotkey-config','theme-engine-config','wezterm-config','wezterm-theme','ohmyposh-config')) {
+        Assert ($moduleText -match [regex]::Escape($managedConfigCheck)) "Doctor must validate managed configuration: $managedConfigCheck"
+    }
+    foreach ($semanticPromptColour in @("'green'","'yellow'","'red'","'background'","'surface'","'border'")) {
+        Assert ($moduleText -match [regex]::Escape($semanticPromptColour)) "Doctor must validate Oh My Posh semantic palette key: $semanticPromptColour"
+    }
     $startupText = Get-Content -LiteralPath (Join-Path $repositoryRoot 'config\komorebi\start-komorebi.ps1') -Raw
     Assert ($startupText -match '\$env:ProgramFiles ''AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must find the Program Files AutoHotkey v2 install.'
     Assert ($startupText -match '\$env:LOCALAPPDATA ''Programs\\AutoHotkey\\v2\\AutoHotkey64\.exe''') 'Startup must retain the per-user AutoHotkey v2 fallback.'
     Assert ($startupText.IndexOf('Test-Path -LiteralPath $installedYasb') -lt $startupText.IndexOf('{ $managedYasb }')) 'Startup must prefer the fingerprinted Program Files YASB over obsolete runtime copies.'
+    Assert ($startupText -match 'function Test-KomorebiReady' -and $startupText -match '& \$komorebic state') 'Startup must verify Komorebi IPC readiness, not only process existence.'
+    Assert ($startupText -match 'for \(\$attempt = 1; \$attempt -le 5;' -and $startupText -match "exit 1") 'Startup must retry Komorebi and report persistent failure to Task Scheduler.'
+    Assert ($renderedAhk -match 'SetTimer\(EnsureKomorebiRunning, 10000\)' -and $renderedAhk -match 'RunWait.+KomorebicExe.+state') 'AutoHotkey must continuously recover a crashed or unresponsive Komorebi instance.'
     Assert ($installText -match 'if \(\$Action -eq ''Repair''\)[\s\S]+?Stop-WwtProcesses[\s\S]+?Install-WwtConfiguration') 'Repair must stop YASB before replacing watched configuration files.'
     Assert ($installText -match "Write-Stage 'startup'") 'Install, Reinstall, and Repair must start the configured desktop stack immediately.'
     Assert ($installText.IndexOf("Installed DWMBlurGlass '") -gt $installText.IndexOf("installStrategy -eq 'guarded-dwm'")) 'DWM recovery validation is outside the guarded DWM preparation block.'
@@ -268,7 +304,7 @@ try {
         Assert ($uninstallText -match $managedProgram) "Orphan cleanup is missing an exact managed-program pattern: $managedProgram"
     }
     Assert ($uninstallText -match 'Uninstall-WwtUserPackages[\s\S]+Invoke-SelfElevation') 'User-scoped WinGet packages must be removed before elevation.'
-    Assert ($uninstallText -match "'AutoHotkey.AutoHotkey','JanDeDobbeleer.OhMyPosh','ajeetdsouza.zoxide','karlstav.cava'") 'The user-context uninstall pass must cover every potentially per-user package.'
+    Assert ($uninstallText -match "'AutoHotkey.AutoHotkey','Brave.Brave','JanDeDobbeleer.OhMyPosh','ajeetdsouza.zoxide','karlstav.cava'") 'The user-context uninstall pass must cover every potentially per-user package.'
     Assert ($uninstallText -match '\^AutoHotkey\(\?: \\\(user\\\)\)\?\$') 'Uninstall must recognize the actual AutoHotkey user registration.'
     Assert ($uninstallText -match 'Uninstall-WwtRegisteredApplications') 'Elevated dependency removal must use registered MSI and quiet uninstallers.'
     Assert ($uninstallText -notmatch 'try \{ Uninstall-WwtDependencies') 'Elevated uninstall must not use WinGet for user-scoped packages.'

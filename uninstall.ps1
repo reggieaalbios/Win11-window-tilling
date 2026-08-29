@@ -149,7 +149,7 @@ function Stop-WwtProcesses {
     # Some packages use helper executables whose names vary by release. Catch
     # those by their known installation directories as well as by process name.
     $managedPathFragments = @(
-        '\komorebi\','\YASB\','\AutoHotkey\','\WezTerm\','\DWMBlurGlass\',
+        '\komorebi\','\YASB\','\AutoHotkey\','\WezTerm\','\DWMBlurGlass\','\EqualizerAPO\',
         '\Programs\oh-my-posh\','\Programs\zoxide\','\cava\'
     )
 
@@ -165,7 +165,7 @@ function Stop-WwtProcesses {
     }
 
     foreach ($attempt in 1..3) {
-        Get-Process -Name komorebi,komorebic,yasb,yasbc,cava,komorebic-no-console,AutoHotkey,AutoHotkey32,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm,wezterm-gui,wezterm-mux-server -ErrorAction SilentlyContinue |
+        Get-Process -Name komorebi,komorebic,yasb,yasbc,cava,komorebic-no-console,AutoHotkey,AutoHotkey32,AutoHotkey64,DWMBlurGlass,DWMBlurGlassGUI,DWMBlurGlassHost,wezterm,wezterm-gui,wezterm-mux-server,Editor,Configurator -ErrorAction SilentlyContinue |
             Where-Object { -not $protectedProcessIds.Contains([int]$_.Id) } |
             Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -184,7 +184,7 @@ function Stop-WwtProcesses {
 }
 
 function Stop-WwtServices {
-    $servicePattern = 'komorebi|yasb|autohotkey|wezterm|dwmblurglass|oh.?my.?posh|zoxide|cava'
+    $servicePattern = 'komorebi|yasb|autohotkey|wezterm|brave|dwmblurglass|equalizer.?apo|oh.?my.?posh|zoxide|cava'
     Get-Service -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -match $servicePattern -or $_.DisplayName -match $servicePattern } |
         ForEach-Object {
@@ -218,8 +218,10 @@ function Remove-WwtDependencyLeftovers {
         (Join-Path $env:ProgramFiles 'komorebi'),
         (Join-Path $env:ProgramFiles 'YASB'),
         (Join-Path $env:ProgramFiles 'WezTerm'),
+        (Join-Path $env:ProgramFiles 'BraveSoftware'),
         (Join-Path $env:ProgramFiles 'AutoHotkey'),
         (Join-Path $env:ProgramFiles 'DWMBlurGlass'),
+        (Join-Path $env:ProgramFiles 'EqualizerAPO'),
         (Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey'),
         (Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'),
         (Join-Path $env:LOCALAPPDATA 'Programs\zoxide'),
@@ -233,6 +235,7 @@ function Remove-WwtDependencyLeftovers {
         (Join-Path $env:APPDATA 'AutoHotkey'),
         (Join-Path $env:LOCALAPPDATA 'wezterm'),
         (Join-Path $env:APPDATA 'wezterm'),
+        (Join-Path $env:LOCALAPPDATA 'BraveSoftware'),
         (Join-Path $env:LOCALAPPDATA 'oh-my-posh'),
         (Join-Path $env:APPDATA 'oh-my-posh')
     )
@@ -244,12 +247,12 @@ function Remove-WwtDependencyLeftovers {
     # WinGet portable packages can leave versioned payload directories and
     # command links even after the package registration has disappeared.
     $wingetLinks = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links'
-    foreach ($commandName in @('komorebi.exe','komorebic.exe','AutoHotkey.exe','AutoHotkey64.exe','wezterm.exe','oh-my-posh.exe','zoxide.exe','cava.exe')) {
+    foreach ($commandName in @('komorebi.exe','komorebic.exe','AutoHotkey.exe','AutoHotkey64.exe','wezterm.exe','brave.exe','oh-my-posh.exe','zoxide.exe','cava.exe')) {
         $link = Join-Path $wingetLinks $commandName
         if (Test-Path -LiteralPath $link) { Remove-KnownPath -Path $link -Roots @($wingetLinks) }
     }
     $wingetPackages = Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Packages'
-    $packagePrefixes = @('LGUG2Z.komorebi_','AutoHotkey.AutoHotkey_','wez.wezterm_','JanDeDobbeleer.OhMyPosh_','ajeetdsouza.zoxide_','karlstav.cava_')
+    $packagePrefixes = @('LGUG2Z.komorebi_','AutoHotkey.AutoHotkey_','wez.wezterm_','Brave.Brave_','JanDeDobbeleer.OhMyPosh_','ajeetdsouza.zoxide_','karlstav.cava_')
     if (Test-Path -LiteralPath $wingetPackages) {
         foreach ($directory in @(Get-ChildItem -LiteralPath $wingetPackages -Directory -Force -ErrorAction SilentlyContinue)) {
             if (@($packagePrefixes | Where-Object { $directory.Name.StartsWith($_,[StringComparison]::OrdinalIgnoreCase) }).Count) {
@@ -266,7 +269,7 @@ function Uninstall-WwtUserPackages {
     # profile belong here.  In particular, do not remove WezTerm before the
     # independent elevated host exists or the terminal can take this script
     # down with it.
-    foreach ($packageId in @('AutoHotkey.AutoHotkey','JanDeDobbeleer.OhMyPosh','ajeetdsouza.zoxide','karlstav.cava')) {
+    foreach ($packageId in @('AutoHotkey.AutoHotkey','Brave.Brave','JanDeDobbeleer.OhMyPosh','ajeetdsouza.zoxide','karlstav.cava')) {
         & $winget.Source uninstall --id $packageId --exact --silent --disable-interactivity --accept-source-agreements
         if ($LASTEXITCODE -notin @(0,-1978335212,-1978335207)) {
             Add-CleanupWarning "WinGet user-context uninstall returned $LASTEXITCODE for $packageId; filesystem and registration cleanup will retry it."
@@ -282,7 +285,7 @@ function Uninstall-WwtRegisteredApplications {
     )
     $managedNames = @(
         '^AutoHotkey(?: \(user\))?$','^cava$','^komorebi$','^WezTerm(?: version .+)?$',
-        '^YASB Reborn$','^Oh My Posh$','^zoxide$'
+        '^YASB Reborn$','^Brave$','^Brave Browser$','^Equalizer APO(?: .+)?$','^Oh My Posh$','^zoxide$'
     )
 
     foreach ($root in $uninstallRoots) {
@@ -338,8 +341,8 @@ function Remove-WwtShortcuts {
         [Environment]::GetFolderPath('StartMenu'),
         [Environment]::GetFolderPath('CommonStartMenu')
     ) | Where-Object { $_ -and (Test-Path -LiteralPath $_) } | Select-Object -Unique
-    $managedShortcutNames = '^(?:AutoHotkey|cava|komorebi|WezTerm|YASB(?: Reborn)?|Oh My Posh|zoxide|DWMBlurGlass|Win11 Window Tiling)(?: .*)?\.(?:lnk|url)$'
-    $managedTargetPattern = '\\(?:komorebi|YASB|AutoHotkey|WezTerm|DWMBlurGlass)\\|\\Programs\\(?:oh-my-posh|zoxide)\\|\\(?:\.local\\)?cava\\|\\Win11WindowTilling\\'
+    $managedShortcutNames = '^(?:AutoHotkey|Brave(?: Browser)?|cava|komorebi|WezTerm|YASB(?: Reborn)?|Equalizer APO|Oh My Posh|zoxide|DWMBlurGlass|Win11 Window Tiling)(?: .*)?\.(?:lnk|url)$'
+    $managedTargetPattern = '\\(?:komorebi|YASB|AutoHotkey|WezTerm|BraveSoftware|DWMBlurGlass|EqualizerAPO)\\|\\Programs\\(?:oh-my-posh|zoxide)\\|\\(?:\.local\\)?cava\\|\\Win11WindowTilling\\'
     $shell = New-Object -ComObject WScript.Shell
 
     foreach ($root in $shortcutRoots) {
@@ -362,7 +365,7 @@ function Get-WwtUninstallLeftovers {
         'HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall',
         'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall'
     )
-    $managedNames = '^(?:AutoHotkey(?: \(user\))?|cava|komorebi|WezTerm(?: version .+)?|YASB Reborn|Oh My Posh|zoxide)$'
+    $managedNames = '^(?:AutoHotkey(?: \(user\))?|Brave|Brave Browser|cava|komorebi|WezTerm(?: version .+)?|YASB Reborn|Equalizer APO(?: .+)?|Oh My Posh|zoxide)$'
     foreach ($root in $uninstallRoots) {
         foreach ($entry in @(Get-ChildItem -LiteralPath $root -ErrorAction SilentlyContinue)) {
             $record = Get-ItemProperty -LiteralPath $entry.PSPath -ErrorAction SilentlyContinue
@@ -374,13 +377,14 @@ function Get-WwtUninstallLeftovers {
     }
     foreach ($path in @(
         (Join-Path $env:ProgramFiles 'komorebi'),(Join-Path $env:ProgramFiles 'YASB'),
-        (Join-Path $env:ProgramFiles 'WezTerm'),(Join-Path $env:ProgramFiles 'AutoHotkey'),
-        (Join-Path $env:ProgramFiles 'DWMBlurGlass'),
+        (Join-Path $env:ProgramFiles 'WezTerm'),(Join-Path $env:ProgramFiles 'BraveSoftware'),(Join-Path $env:ProgramFiles 'AutoHotkey'),
+        (Join-Path $env:ProgramFiles 'DWMBlurGlass'),(Join-Path $env:ProgramFiles 'EqualizerAPO'),
         (Join-Path $env:LOCALAPPDATA 'Programs\AutoHotkey'),
         (Join-Path $env:LOCALAPPDATA 'Programs\oh-my-posh'),
         (Join-Path $env:LOCALAPPDATA 'Programs\zoxide'),
         (Join-Path $env:LOCALAPPDATA 'cava'),(Join-Path $env:USERPROFILE '.local\cava'),
         (Join-Path $env:LOCALAPPDATA 'YASB'),(Join-Path $env:LOCALAPPDATA 'komorebi'),
+        (Join-Path $env:LOCALAPPDATA 'BraveSoftware'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\zoxide.exe'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\oh-my-posh.exe'),
         (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\cava.exe')
@@ -398,10 +402,13 @@ function Remove-WwtOrphanedUninstallEntries {
     )
     $managedNames = @(
         '^AutoHotkey(?: \(user\))?$',
+        '^Brave$',
+        '^Brave Browser$',
         '^cava$',
         '^komorebi$',
         '^WezTerm(?: version .+)?$',
         '^YASB Reborn$',
+        '^Equalizer APO(?: .+)?$',
         '^Oh My Posh$',
         '^zoxide$'
     )

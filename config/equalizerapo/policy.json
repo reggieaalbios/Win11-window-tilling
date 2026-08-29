@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "defaultPreampDb": 20,
+  "maximumPreampDb": 20,
+  "deviceSelection": "local-only"
+}
