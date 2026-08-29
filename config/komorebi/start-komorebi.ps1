@@ -13,7 +13,8 @@ $komorebi = Join-Path $env:ProgramFiles 'komorebi\bin\komorebi.exe'
 $komorebiConfig = Join-Path $configHome 'komorebi.json'
 $themeEngine = Join-Path $env:USERPROFILE '.config\theme-engine\theme-engine.ps1'
 $managedYasb = Join-Path $env:LOCALAPPDATA 'Win11WindowTilling\runtime\YASB\yasb.exe'
-$yasb = if (Test-Path -LiteralPath $managedYasb) { $managedYasb } else { Join-Path $env:ProgramFiles 'YASB\yasb.exe' }
+$installedYasb = Join-Path $env:ProgramFiles 'YASB\yasb.exe'
+$yasb = if (Test-Path -LiteralPath $installedYasb) { $installedYasb } else { $managedYasb }
 $dwmBlurGlassTask = 'DWMBlurGlass_Extend'
 
 function Test-SessionProcess {

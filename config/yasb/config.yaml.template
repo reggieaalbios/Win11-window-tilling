@@ -94,7 +94,7 @@ widgets:
   quick_launch:
     type: "yasb.shortcut_guide.CoordinatedQuickLaunchWidget"
     options:
-      label: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/windows-logo.svg" width="13" height="13" style="vertical-align: -2px;">'
+      label: ""
       search_placeholder: "Type to search..."
       remember_last_query: false
       max_results: 8
@@ -345,7 +345,7 @@ widgets:
   wallpapers:
     type: "yasb.shortcut_guide.CoordinatedWallpapersWidget"
     options:
-      label: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/wallpaper-minimal.svg" width="14" height="14" style="vertical-align: -2px;">'
+      label: ""
       tooltip: true
       image_path: "{{WALLPAPER_DIR_YAML}}"
       change_automatically: false
@@ -405,7 +405,7 @@ widgets:
   power_menu:
     type: "yasb.shortcut_guide.CoordinatedPowerMenuWidget"
     options:
-      label: '<img src="{{USER_PROFILE_URI}}/.config/yasb/assets/power-minimal.svg" width="13" height="13" style="vertical-align: -2px;">'
+      label: ""
       uptime: false
       blur: true
       blur_background: true

@@ -6,8 +6,8 @@
   "mode": "dark",
   "fallback": true,
   "opacity": {
-    "bar": 0.78,
-    "popup": 0.9
+    "bar": 0.55,
+    "popup": 0.68
   },
   "source": {
     "medianLuminance": 0.1,

@@ -17,12 +17,12 @@
   "border_offset": -1,
   "border_style": "Rounded",
   "border_colours": {
-    "single": "#72ddff", "stack": "#72ddff", "monocle": "#72ddff",
-    "floating": "#72ddff", "unfocused": "#315f78", "unfocused_locked": "#426d83"
+    "single": "#936DEB", "stack": "#936DEB", "monocle": "#936DEB",
+    "floating": "#936DEB", "unfocused": "#6E58A5", "unfocused_locked": "#443572"
   },
   "stackbar": { "mode": "Never" },
   "animation": {
-    "enabled": { "movement": false, "transparency": false },
+    "enabled": { "movement": true, "transparency": false },
     "duration": { "movement": 180, "transparency": 180 },
     "style": { "movement": "EaseOutSine", "transparency": "EaseOutSine" },
     "fps": 60
@@ -44,8 +44,6 @@
   "monitors": [{ "workspaces": [
     { "name": "1", "layout": "BSP" }, { "name": "2", "layout": "BSP" },
     { "name": "3", "layout": "BSP" }, { "name": "4", "layout": "BSP" },
-    { "name": "5", "layout": "BSP" }, { "name": "6", "layout": "BSP" },
-    { "name": "7", "layout": "BSP" }, { "name": "8", "layout": "BSP" },
-    { "name": "9", "layout": "BSP" }
+    { "name": "5", "layout": "BSP" }
   ] }]
 }

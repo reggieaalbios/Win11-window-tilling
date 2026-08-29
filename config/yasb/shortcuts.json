@@ -1,11 +1,11 @@
 {
   "sections": [
     {"title":"Essentials","items":[
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","H"],"description":"Open shortcut help"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","H"],"description":"Keyboard shortcut help"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Enter"],"description":"Open terminal"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","Enter"],"description":"Toggle dropdown terminal"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","D"],"description":"Open app menu"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","W"],"description":"Open wallpaper menu"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","D"],"description":"Open quick app launcher"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","W"],"description":"Open wallpaper selector"},
       {"keys":["Ctrl","Alt","P"],"description":"Open power menu"},
       {"keys":["Alt","Tab"],"description":"Cycle apps in the current workspace"}
     ]},
@@ -41,18 +41,16 @@
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","F"],"description":"Toggle fullscreen"}
     ]},
     {"title":"Workspaces and Monitors","items":[
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","1-9"],"description":"Focus workspace"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","1-9"],"description":"Move window and follow"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","1-5"],"description":"Focus workspace"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","1-5"],"description":"Move window and follow"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","A / S"],"description":"Previous or next workspace"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","A / D"],"description":"Move window to previous or next monitor"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Left / Up"],"description":"Move window to previous monitor"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Right / Down"],"description":"Move window to next monitor"}
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","A / D"],"description":"Move window to another monitor"},
+      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Arrows"],"description":"Move window to next monitor"}
     ]},
     {"title":"System","items":[
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Shift","S"],"description":"Open screen snip"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Print Screen"],"description":"Capture full screenshot"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","T"],"description":"Toggle Windows taskbar"},
-      {"keys":["{{MAIN_MODIFIER_LABEL}}","Ctrl","Backspace"],"description":"Apply safe theme"},
       {"keys":["{{MAIN_MODIFIER_LABEL}}","M"],"description":"Exit Komorebi"}
     ]}
   ]

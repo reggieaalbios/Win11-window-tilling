@@ -9,7 +9,7 @@ param(
     [string]$TargetWallpaperDirectory,
 
     [ValidateSet('Win','Caps')]
-    [string]$MainModifier = 'Win'
+    [string]$MainModifier = 'Caps'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -64,8 +64,12 @@ foreach ($wezTermFile in Get-ChildItem -LiteralPath $wezTermSource -File) {
 $wallpaperSource = Join-Path $repositoryRoot 'wallpapers'
 $wallpaperDestination = Join-Path $resolvedOutput 'Pictures\Wallpapers'
 New-Item -ItemType Directory -Path $wallpaperDestination -Force | Out-Null
-Get-ChildItem -LiteralPath $wallpaperSource -File -Filter '*.png' |
-    Copy-Item -Destination $wallpaperDestination -Force
+# Keep the canonical wallpaper available for isolated rendering tests. The full
+# pinned bank overwrites this byte-identical file during installation.
+Copy-Item -LiteralPath (Join-Path $wallpaperSource 'jakoolit-anime-purple-eyes.png') `
+    -Destination (Join-Path $wallpaperDestination 'Anime-Purple-eyes.png') -Force
+Copy-Item -LiteralPath (Join-Path $wallpaperSource 'JAKOOLIT-WALLPAPER-SOURCE.txt') `
+    -Destination $wallpaperDestination -Force
 
 # Keep layout rules immutable at runtime. The adaptive engine composes this
 # stable file with its generated color-only stylesheet into styles.css.
@@ -100,8 +104,28 @@ if ($renderedYaml -match '{{[A-Z0-9_]+}}') {
 $utf8NoBom = New-Object Text.UTF8Encoding($false)
 [IO.File]::WriteAllText($yasbDestination, $renderedYaml, $utf8NoBom)
 
+$profileFile = Join-Path $profileDestination 'Microsoft.PowerShell_profile.ps1'
+$renderedProfile = [IO.File]::ReadAllText($profileFile).
+    Replace('{{USER_PROFILE_WIN}}', $TargetUserProfile).
+    Replace('function op   { micro $PROFILE }', "function op   { micro `$PROFILE } ").
+    Replace("`r`n", "`n")
+[IO.File]::WriteAllText($profileFile, $renderedProfile, $utf8NoBom)
+
+# Match the adaptive theme engine's canonical generated-file serialization.
+$wezTermThemeFile = Join-Path $resolvedOutput 'wwt-theme.lua'
+$renderedWezTermTheme = [IO.File]::ReadAllText($wezTermThemeFile).TrimEnd("`r", "`n")
+[IO.File]::WriteAllText($wezTermThemeFile, $renderedWezTermTheme, $utf8NoBom)
+
+$ohMyPoshFile = Join-Path $resolvedOutput '.config\ohmyposh\catppuccin_mocha.omp.json'
+$renderedOhMyPosh = [IO.File]::ReadAllText($ohMyPoshFile) |
+    ConvertFrom-Json |
+    ConvertTo-Json -Depth 30
+[IO.File]::WriteAllText($ohMyPoshFile, $renderedOhMyPosh, $utf8NoBom)
+
 $ahkDestination = Join-Path $resolvedOutput '.config\komorebi\komorebi.ahk'
-$renderedAhk = [IO.File]::ReadAllText($ahkDestination).Replace('{{MAIN_MODIFIER_AHK}}', $MainModifier)
+$renderedAhk = [IO.File]::ReadAllText($ahkDestination).
+    Replace('{{MAIN_MODIFIER_AHK}}', $MainModifier).
+    Replace("`r`n", "`n")
 [IO.File]::WriteAllText($ahkDestination, $renderedAhk, $utf8NoBom)
 
 $komorebiDestination = Join-Path $resolvedOutput '.config\komorebi\komorebi.json'
@@ -116,7 +140,7 @@ $renderedShortcuts = [IO.File]::ReadAllText($shortcutsDestination).
     Replace('{{MAIN_MODIFIER_LABEL}}', $MainModifier)
 [IO.File]::WriteAllText($shortcutsDestination, $renderedShortcuts, $utf8NoBom)
 
-$unresolvedFiles = @($ahkDestination, $komorebiDestination, $shortcutsDestination, $yasbDestination)
+$unresolvedFiles = @($ahkDestination, $komorebiDestination, $shortcutsDestination, $yasbDestination, $profileFile, $wezTermThemeFile, $ohMyPoshFile)
 foreach ($unresolvedFile in $unresolvedFiles) {
     $content = [IO.File]::ReadAllText($unresolvedFile)
     if ($content -match '{{[A-Z0-9_]+}}') {

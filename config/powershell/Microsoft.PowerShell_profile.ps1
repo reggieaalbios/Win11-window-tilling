@@ -1,3 +1,4 @@
+
 function winget {
     & winget.exe @args
 
@@ -24,13 +25,24 @@ if (Get-Command zoxide -ErrorAction SilentlyContinue) {
 # which is incompatible with this Windows PowerShell 5.1/PSReadLine combination.
 if ((Get-Command oh-my-posh -ErrorAction SilentlyContinue) -and
     -not (Get-Command Set-PoshContext -ErrorAction SilentlyContinue)) {
-    $ohMyPoshTheme = Join-Path $HOME '.config\ohmyposh\catppuccin_mocha.omp.json'
-    (& oh-my-posh init powershell --config $ohMyPoshTheme | Out-String) | Invoke-Expression
+    (& oh-my-posh init powershell --config "{{USER_PROFILE_WIN}}\.config\ohmyposh\catppuccin_mocha.omp.json" | Out-String) | Invoke-Expression
 }
 
 function dls  { Set-Location "$HOME\Downloads" }
 function docs { Set-Location "$HOME\Documents" }
 function desk { Set-Location "$HOME\Desktop" }
+function dev  { Set-Location "$HOME\Dev"}
 function home { Set-Location "$HOME" }
-function rel   { . $PROFILE }
+function win  { Set-Location "$HOME\Dev\Win11-window-tilling"}
+
+function gs   { git status @args }
+function gb   { git branch @args }
+function gr   { git remote @args }
+function gsw  { git switch @args }
+function gtl   { git log --graph --oneline --decorate }
+
+function op   { micro $PROFILE }
+function t    { tldr @args }
+function la   { eza -lah @args }
+
 Set-Alias clip Set-Clipboard
