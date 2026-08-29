@@ -1,4 +1,4 @@
-$ErrorActionPreference = 'Continue'
+$ErrorActionPreference = 'Stop'
 
 $sessionId = (Get-Process -Id $PID).SessionId
 $configHome = Join-Path $env:USERPROFILE '.config\komorebi'
@@ -10,6 +10,7 @@ $autoHotkeyCandidates = @(
 $autoHotkey = @($autoHotkeyCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1)[0]
 $komorebiScript = Join-Path $configHome 'komorebi.ahk'
 $komorebi = Join-Path $env:ProgramFiles 'komorebi\bin\komorebi.exe'
+$komorebic = Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe'
 $komorebiConfig = Join-Path $configHome 'komorebi.json'
 $themeEngine = Join-Path $env:USERPROFILE '.config\theme-engine\theme-engine.ps1'
 $managedYasb = Join-Path $env:LOCALAPPDATA 'Win11WindowTilling\runtime\YASB\yasb.exe'
@@ -66,6 +67,39 @@ function Start-SessionProcess {
     Start-Process @startArguments
 }
 
+function Test-KomorebiReady {
+    if (-not (Test-SessionProcess 'komorebi') -or -not (Test-Path -LiteralPath $komorebic)) { return $false }
+    try {
+        & $komorebic state 2>$null | Out-Null
+        return $LASTEXITCODE -eq 0
+    } catch {
+        return $false
+    }
+}
+
+function Start-KomorebiReliable {
+    for ($attempt = 1; $attempt -le 5; $attempt++) {
+        if (-not (Test-KomorebiReady)) {
+            Get-Process -Name komorebi -ErrorAction SilentlyContinue |
+                Where-Object SessionId -eq $sessionId |
+                Stop-Process -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Milliseconds 300
+            Start-SessionProcess 'komorebi' $komorebi ('--config "{0}"' -f $komorebiConfig) -Hidden
+        }
+
+        $readyDeadline = (Get-Date).AddSeconds(10)
+        while ((Get-Date) -lt $readyDeadline) {
+            if (Test-KomorebiReady) {
+                Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) Komorebi ready on attempt $attempt"
+                return
+            }
+            Start-Sleep -Milliseconds 500
+        }
+        Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) Komorebi not ready after attempt $attempt"
+    }
+    throw 'Komorebi did not become ready after 5 attempts.'
+}
+
 Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) fast startup began (session $sessionId)"
 
 # Explorer normally appears almost immediately. Waiting for its process avoids
@@ -75,27 +109,16 @@ while (-not (Test-SessionProcess 'explorer') -and (Get-Date) -lt $shellDeadline)
     Start-Sleep -Milliseconds 100
 }
 
-# Start the desktop stack without waiting for each GUI application to finish.
-# Repeat only missing processes, covering brief shell/app initialization races.
-for ($attempt = 1; $attempt -le 3; $attempt++) {
-    Start-SessionProcess 'komorebi' $komorebi ('--config "{0}"' -f $komorebiConfig) -Hidden
-
-    # Start-Process returns quickly, but wait briefly until the process is
-    # observable so the AHK fallback cannot race and request a second instance.
-    $komorebiDeadline = (Get-Date).AddSeconds(1)
-    while (-not (Test-SessionProcess 'komorebi') -and (Get-Date) -lt $komorebiDeadline) {
-        Start-Sleep -Milliseconds 50
-    }
-
-    Start-KomorebiHotkeys
-    Start-SessionProcess 'yasb' $yasb
-    Start-Sleep -Seconds 1
-    if ((Test-SessionProcess 'komorebi') -and
-        (Test-KomorebiHotkeys) -and
-        (Test-SessionProcess 'yasb')) {
-        break
-    }
+# Do not start the hotkey controller until Komorebi's IPC server answers. This
+# prevents its fallback launcher from racing a slow logon-time process.
+try {
+    Start-KomorebiReliable
+} catch {
+    Add-Content -LiteralPath $startupLog -Value "$(Get-Date -Format o) startup failed: $($_.Exception.Message)"
+    exit 1
 }
+Start-KomorebiHotkeys
+Start-SessionProcess 'yasb' $yasb
 
 # Recover an interrupted theme transaction before the user starts changing
 # wallpapers. Startup mode is a no-op when the previous commit was clean.

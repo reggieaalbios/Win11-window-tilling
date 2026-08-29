@@ -45,4 +45,64 @@ function op   { micro $PROFILE }
 function t    { tldr @args }
 function la   { eza -lah @args }
 
+function Restart-Komorebi {
+    $komorebicPath = Join-Path $env:ProgramFiles 'komorebi\bin\komorebic.exe'
+    $autoHotkeyPath = Join-Path $env:ProgramFiles 'AutoHotkey\v2\AutoHotkey64.exe'
+    $hotkeyConfigPath = Join-Path $env:USERPROFILE '.config\komorebi\komorebi.ahk'
+
+    foreach ($requiredPath in @($komorebicPath, $autoHotkeyPath, $hotkeyConfigPath)) {
+        if (-not (Test-Path -LiteralPath $requiredPath)) {
+            throw "Komorebi reload dependency is missing: $requiredPath"
+        }
+    }
+
+    if (Get-Process komorebi -ErrorAction SilentlyContinue) {
+        & $komorebicPath stop
+        if ($LASTEXITCODE) { throw "Komorebi stop failed with exit code $LASTEXITCODE." }
+    }
+
+    Start-Process -FilePath $autoHotkeyPath `
+        -ArgumentList ('"{0}"' -f $hotkeyConfigPath) `
+        -WindowStyle Hidden
+}
+
+function Restart-KomorebiHotkeys {
+    $autoHotkeyPath = Join-Path $env:ProgramFiles 'AutoHotkey\v2\AutoHotkey64.exe'
+    $hotkeyConfigPath = Join-Path $env:USERPROFILE '.config\komorebi\komorebi.ahk'
+    foreach ($requiredPath in @($autoHotkeyPath, $hotkeyConfigPath)) {
+        if (-not (Test-Path -LiteralPath $requiredPath)) {
+            throw "AutoHotkey reload dependency is missing: $requiredPath"
+        }
+    }
+    Start-Process -FilePath $autoHotkeyPath `
+        -ArgumentList ('"{0}"' -f $hotkeyConfigPath) `
+        -WindowStyle Hidden
+}
+
+function Restart-Yasb {
+    $yasbcPath = Join-Path $env:ProgramFiles 'YASB\yasbc.exe'
+    if (-not (Test-Path -LiteralPath $yasbcPath)) {
+        throw "YASB reload dependency is missing: $yasbcPath"
+    }
+    & $yasbcPath reload
+    if ($LASTEXITCODE) { throw "YASB reload failed with exit code $LASTEXITCODE." }
+}
+
+function re {
+    if ($args.Count -ne 1) {
+        Write-Output 'Usage: re --kr | --ys | --ahk | --all'
+        return
+    }
+
+    switch ($args[0]) {
+        '--kr'  { Restart-Komorebi }
+        '--ys'  { Restart-Yasb }
+        '--ahk' { Restart-KomorebiHotkeys }
+        '--all' { Restart-Komorebi; Restart-Yasb }
+        default { throw "Unknown reload target '$($args[0])'. Usage: re --kr | --ys | --ahk | --all" }
+    }
+}
+
 Set-Alias clip Set-Clipboard
+Set-Alias kreload Restart-Komorebi
+Set-Alias kr Restart-Komorebi

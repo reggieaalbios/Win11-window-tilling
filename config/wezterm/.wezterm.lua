@@ -116,12 +116,40 @@ local cycle_two_pane_layout = wezterm.action_callback(function(window, pane)
   end
 end)
 
+local split_balanced_grid = wezterm.action_callback(function(_, pane)
+  local tab = pane:tab()
+  local pane_info = tab:panes_with_info()
+  local largest = pane_info[1]
+
+  for _, info in ipairs(pane_info) do
+    local area = info.pixel_width * info.pixel_height
+    local largest_area = largest.pixel_width * largest.pixel_height
+    if area > largest_area then
+      largest = info
+    end
+  end
+
+  if largest.is_zoomed then
+    tab:set_zoomed(false)
+  end
+
+  local direction = "Right"
+  if largest.pixel_height > largest.pixel_width then
+    direction = "Bottom"
+  end
+
+  largest.pane:split({
+    direction = direction,
+    size = 0.5,
+  })
+end)
+
 config.keys = {
-  -- Split into top and bottom panes, with a new PowerShell session below.
+  -- Split the largest pane along its longest edge to maintain a balanced grid.
   {
     key = "Enter",
     mods = "CTRL|SHIFT",
-    action = wezterm.action.SplitVertical({ domain = "CurrentPaneDomain" }),
+    action = split_balanced_grid,
   },
 
   -- Cycle: top/bottom -> left/right -> focused pane -> top/bottom.

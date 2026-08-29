@@ -2019,6 +2019,11 @@
       },
       {
         "kind": "Exe",
+        "id": "PowerToys.QuickAccess.exe",
+        "matching_strategy": "Equals"
+      },
+      {
+        "kind": "Exe",
         "id": "Microsoft.CmdPal.UI.exe",
         "matching_strategy": "Equals"
       }
@@ -2762,6 +2767,18 @@
           "id": " - Microsoft Visual Studio",
           "matching_strategy": "DoesNotContain"
         }
+      ],
+      [
+        {
+          "kind": "Exe",
+          "id": "DevHub.exe",
+          "matching_strategy": "Equals"
+        },
+        {
+          "kind": "Class",
+          "id": "ThreadedWaitDialog",
+          "matching_strategy": "Equals"
+        }
       ]
     ],
     "ignore": [
@@ -3247,33 +3264,6 @@
       {
         "kind": "Exe",
         "id": "zen.exe",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Komorebi Dropdown Explorer": {
-    "floating": [
-      {
-        "kind": "Title",
-        "id": "Komorebi Dropdown Explorer",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Komorebi Dropdown PowerShell": {
-    "floating": [
-      {
-        "kind": "Class",
-        "id": "KomorebiDropdown",
-        "matching_strategy": "Equals"
-      }
-    ]
-  },
-  "Komorebi Dropdown Notepad": {
-    "floating": [
-      {
-        "kind": "Title",
-        "id": "Komorebi Dropdown Notepad",
         "matching_strategy": "Equals"
       }
     ]

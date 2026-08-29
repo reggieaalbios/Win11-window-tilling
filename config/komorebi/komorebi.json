@@ -3,9 +3,9 @@
   "app_specific_configuration_path": "{{USER_PROFILE_URI}}/.config/komorebi/applications.json",
   "window_hiding_behaviour": "Cloak",
   "cross_monitor_move_behaviour": "Insert",
-  "global_work_area_offset": { "left": 7, "top": -1, "right": 14, "bottom": 7 },
-  "default_workspace_padding": 0,
-  "default_container_padding": 2,
+  "global_work_area_offset": { "left": 4, "top": -1, "right": 8, "bottom": 1 },
+  "default_workspace_padding": 1,
+  "default_container_padding": 1,
   "resize_delta": 120,
   "mouse_follows_focus": false,
   "toggle_float_placement": "Center",
@@ -22,7 +22,7 @@
   },
   "stackbar": { "mode": "Never" },
   "animation": {
-    "enabled": { "movement": true, "transparency": false },
+    "enabled": { "movement": false, "transparency": false },
     "duration": { "movement": 180, "transparency": 180 },
     "style": { "movement": "EaseOutSine", "transparency": "EaseOutSine" },
     "fps": 60
@@ -42,8 +42,8 @@
     [{ "kind": "Exe", "id": "POWERPNT.EXE", "matching_strategy": "Equals" }, { "kind": "Class", "id": "PPTFrameClass", "matching_strategy": "DoesNotEqual" }]
   ],
   "monitors": [{ "workspaces": [
-    { "name": "1", "layout": "BSP" }, { "name": "2", "layout": "BSP" },
-    { "name": "3", "layout": "BSP" }, { "name": "4", "layout": "BSP" },
-    { "name": "5", "layout": "BSP" }
+    { "name": "1", "layout": "Grid" }, { "name": "2", "layout": "Grid" },
+    { "name": "3", "layout": "Grid" }, { "name": "4", "layout": "Grid" },
+    { "name": "5", "layout": "Grid" }
   ] }]
 }

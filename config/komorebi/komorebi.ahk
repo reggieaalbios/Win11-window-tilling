@@ -10,9 +10,13 @@ if A_Args.Length && A_Args[1] = "--validate"
 
 ProgramFilesHome := EnvGet("ProgramFiles")
 UserProfileHome := EnvGet("USERPROFILE")
+LocalAppDataHome := EnvGet("LOCALAPPDATA")
 KomorebicExe := ProgramFilesHome "\komorebi\bin\komorebic-no-console.exe"
 KomorebiExe := ProgramFilesHome "\komorebi\bin\komorebi.exe"
+YasbcExe := ProgramFilesHome "\YASB\yasbc.exe"
 WezTermGuiExe := ProgramFilesHome "\WezTerm\wezterm-gui.exe"
+BraveMachineExe := ProgramFilesHome "\BraveSoftware\Brave-Browser\Application\brave.exe"
+BraveExe := FileExist(BraveMachineExe) ? BraveMachineExe : LocalAppDataHome "\BraveSoftware\Brave-Browser\Application\brave.exe"
 ConfigHome := UserProfileHome "\.config\komorebi"
 ConfigFile := ConfigHome "\komorebi.json"
 ScreenshotHelper := ConfigHome "\capture-fullscreen.ps1"
@@ -20,6 +24,8 @@ ThemeEngine := UserProfileHome "\.config\theme-engine\theme-engine.ps1"
 DropdownTitle := "Komorebi Dropdown PowerShell"
 DropdownNotesFile := UserProfileHome "\Documents\Dropdown Notes.txt"
 MainModifier := "{{MAIN_MODIFIER_AHK}}"
+if MainModifier = "Caps"
+    SetCapsLockState("AlwaysOff")
 global ResizeMode := false
 global WindowsTaskbarHidden := true
 global FocusedWindowAlpha := 242
@@ -30,6 +36,7 @@ global ManagedWorkspaceSnapshot := Map()
 global LastManagedStateRefresh := 0
 global LastBlockedTitleClickHwnd := 0
 global LastBlockedTitleClickAt := 0
+global ExplicitWorkspaceOneMonocle := false
 
 ; Read-only runtime probe used by the repository validation gate. It exercises
 ; the COM capture, JSON parser, and active-workspace classifier without starting
@@ -53,10 +60,15 @@ if !ProcessExist("komorebi.exe") {
     }
     Sleep(1000)
 }
+SetTimer(EnsureKomorebiRunning, 10000)
 InitializeWindowGlass()
 SetTimer(KeepAllWindowsTranslucent, 500)
 HideWindowsTaskbars()
+ApplyKomorebiWorkArea()
 SetTimer(HideWindowsTaskbars, 100)
+; Cava's audio capture can remain attached to the pre-sleep audio session.
+; Reload YASB once Windows Audio has had time to recover after wake.
+OnMessage(0x0218, HandlePowerBroadcast)
 ; Seed a small fail-open cache for mouse hit-testing. It refreshes lazily on
 ; interaction instead of spawning a state process continuously in the background.
 RefreshManagedWindowCache()
@@ -65,6 +77,36 @@ RefreshManagedWindowCache()
 ; They stay hidden, but their processes, renderers, and content are ready before
 ; the first Caps+Shift hotkey press.
 SetTimer(PrewarmDropdownApps, -10)
+
+EnsureKomorebiRunning() {
+    global KomorebicExe, KomorebiExe, ConfigFile
+    if ProcessExist("komorebi.exe") {
+        try {
+            if RunWait('"' KomorebicExe '" state', , "Hide") = 0
+                return
+        }
+        try ProcessClose("komorebi.exe")
+        Sleep(300)
+    }
+    try {
+        Run('"' KomorebiExe '" --config "' ConfigFile '"', , "Hide")
+        ProcessWait("komorebi.exe", 10)
+    }
+}
+
+HandlePowerBroadcast(wParam, lParam, msg, hwnd) {
+    ; PBT_APMRESUMESUSPEND (7) and PBT_APMRESUMEAUTOMATIC (18) may both
+    ; arrive for one wake. Replacing the one-shot timer debounces them.
+    if wParam = 7 || wParam = 18
+        SetTimer(ReloadYasbAfterResume, -6000)
+    return true
+}
+
+ReloadYasbAfterResume() {
+    global YasbcExe
+    if ProcessExist("yasb.exe") && FileExist(YasbcExe)
+        Run('"' YasbcExe '" reload', , "Hide")
+}
 
 EnterResizeMode() {
     global ResizeMode
@@ -77,91 +119,58 @@ ExitResizeMode() {
 }
 MoveAndFollow(workspace) {
     Komorebic("move-to-workspace " workspace)
+    FocusWorkspace(workspace)
+}
+
+FocusWorkspace(workspace) {
     Komorebic("focus-workspace " workspace)
+    ScheduleWorkspaceOneLayoutGuard()
+}
+
+CycleWorkspace(direction) {
+    Komorebic("cycle-workspace " direction)
+    ScheduleWorkspaceOneLayoutGuard()
+}
+
+ScheduleWorkspaceOneLayoutGuard() {
+    ; Chromium/Edge can publish a second restore/activation event after the
+    ; workspace switch animation. Recheck through that short restore window.
+    SetTimer(GuardWorkspaceOneLayout, -250)
+    SetTimer(GuardWorkspaceOneLayoutSecondPass, -750)
+    SetTimer(GuardWorkspaceOneLayoutFinalPass, -1500)
+}
+
+GuardWorkspaceOneLayoutSecondPass() {
+    GuardWorkspaceOneLayout()
+}
+
+GuardWorkspaceOneLayoutFinalPass() {
+    GuardWorkspaceOneLayout()
+}
+
+GuardWorkspaceOneLayout() {
+    global ExplicitWorkspaceOneMonocle
+    try {
+        state := JsonParse(CaptureKomorebiJson("state"))
+        monitors := state["monitors"]
+        monitor := monitors["elements"][monitors["focused"] + 1]
+        workspaces := monitor["workspaces"]
+        if workspaces["focused"] != 0
+            return
+        workspace := workspaces["elements"][1]
+        if workspace["layout"]["Default"] != "Grid"
+            Komorebic("change-layout grid")
+        if workspace["monocle_container"] is Map && !ExplicitWorkspaceOneMonocle {
+            Komorebic("toggle-monocle")
+            ; Verify once more after Komorebi and Edge finish repainting.
+            SetTimer(GuardWorkspaceOneLayoutFinalPass, -500)
+        }
+    }
 }
 
 LaunchWezTermWindow() {
     global WezTermGuiExe
-
-    terminalSelector := "ahk_class org.wezfurlong.wezterm ahk_exe wezterm-gui.exe"
-    previousDetectHidden := A_DetectHiddenWindows
-    DetectHiddenWindows(true)
-
-    existingWindows := Map()
-    for existingHwnd in WinGetList(terminalSelector)
-        existingWindows[existingHwnd] := true
-
-    ; Create the native HWND hidden, then give it an empty region before its
-    ; first Show event.  It remains a normal (non-layered) window, so Komorebi
-    ; can dynamically tile it without exposing WezTerm's untiled first frame.
-    Run('"' WezTermGuiExe '" start --always-new-process', , "Hide")
-    hwnd := WaitForNewWindow(terminalSelector, existingWindows, 8000, 0, 10)
-    if !hwnd {
-        DetectHiddenWindows(previousDetectHidden)
-        TrayTip("WezTerm did not appear.", "Terminal", 2)
-        return
-    }
-
-    emptyRegion := DllCall("Gdi32\CreateRectRgn", "Int", 0, "Int", 0, "Int", 0, "Int", 0, "Ptr")
-    if emptyRegion
-        DllCall("User32\SetWindowRgn", "Ptr", hwnd, "Ptr", emptyRegion, "Int", true)
-
-    WinGetPos(&initialX, &initialY, &initialW, &initialH, "ahk_id " hwnd)
-    WinShow("ahk_id " hwnd)
-    WaitForWindowRetile(hwnd, initialX, initialY, initialW, initialH, 60)
-
-    ; A null region restores the complete window after Komorebi has assigned
-    ; the correct tile for the current number of workspace containers.
-    DllCall("User32\SetWindowRgn", "Ptr", hwnd, "Ptr", 0, "Int", true)
-    ; Keep the resize frame used for initial tiling, but remove the native
-    ; caption controls only after Komorebi has established final geometry.
-    RemoveCaptionControls(hwnd)
-    WinActivate("ahk_id " hwnd)
-
-    ; A newly inserted tile must never lend its tile dimensions to the
-    ; separately-classed drop-down. Restore the overlay geometry immediately
-    ; if it happens to be visible while Komorebi recalculates this workspace.
-    dropdownHwnd := FindDropdownWindow()
-    if dropdownHwnd && DllCall("IsWindowVisible", "Ptr", dropdownHwnd)
-        PositionDropdownWindow(dropdownHwnd)
-    DetectHiddenWindows(previousDetectHidden)
-}
-
-RemoveCaptionControls(hwnd) {
-    static WS_THICKFRAME := 0x00040000
-    static CAPTION_CONTROLS := 0x00CB0000 ; caption, system menu, min/max boxes
-    static SWP_FRAMECHANGED := 0x0020
-    static SWP_NOSIZE := 0x0001
-    static SWP_NOMOVE := 0x0002
-    static SWP_NOZORDER := 0x0004
-    static SWP_NOACTIVATE := 0x0010
-
-    style := WinGetStyle("ahk_id " hwnd)
-    style := (style | WS_THICKFRAME) & ~CAPTION_CONTROLS
-    WinSetStyle(style, "ahk_id " hwnd)
-    DllCall("User32\SetWindowPos",
-        "Ptr", hwnd, "Ptr", 0,
-        "Int", 0, "Int", 0, "Int", 0, "Int", 0,
-        "UInt", SWP_FRAMECHANGED | SWP_NOSIZE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE)
-}
-
-WaitForWindowRetile(hwnd, initialX, initialY, initialW, initialH, timeoutMs) {
-    deadline := A_TickCount + timeoutMs
-    while A_TickCount < deadline {
-        if !IsLiveWindow(hwnd)
-            return false
-
-        WinGetPos(&currentX, &currentY, &currentW, &currentH, "ahk_id " hwnd)
-        if currentX != initialX || currentY != initialY || currentW != initialW || currentH != initialH
-            return true
-
-        ; Komorebi's movement animation updates at 60 fps, so a 5 ms poll
-        ; catches the first geometry change without adding a visible pause.
-        Sleep(5)
-    }
-    ; If the first window already has the full-tile dimensions, Komorebi may
-    ; not need to move it at all; reveal it after this short safety window.
-    return true
+    Run('"' WezTermGuiExe '" start --always-new-process')
 }
 
 PrewarmDropdownApps() {
@@ -584,11 +593,20 @@ AnimateDropdown(hwnd, showing) {
 }
 
 ToggleMonocle() {
+    global ExplicitWorkspaceOneMonocle
     ; A window left in native-maximized state fights Komorebi's monocle sizing.
     ; Restore it first so fake fullscreen keeps the configured gaps and corners.
     if WinGetMinMax("A") = 1 {
         Komorebic("toggle-maximize")
         Sleep(150)
+    }
+    try {
+        state := JsonParse(CaptureKomorebiJson("state"))
+        monitors := state["monitors"]
+        monitor := monitors["elements"][monitors["focused"] + 1]
+        workspaces := monitor["workspaces"]
+        if workspaces["focused"] = 0
+            ExplicitWorkspaceOneMonocle := !(workspaces["elements"][1]["monocle_container"] is Map)
     }
     Komorebic("toggle-monocle")
 }
@@ -613,6 +631,9 @@ HandleShellWindowEvent(eventCode, hwnd, *) {
         ; Some apps finish creating their native window just after the shell event.
         SetTimer(KeepWindowTranslucent.Bind(hwnd), -1)
     }
+    ; Workspace changes also surface as shell activation events, including YASB.
+    if eventCode = 4 || eventCode = 0x8004
+        ScheduleWorkspaceOneLayoutGuard()
 }
 
 KeepAllWindowsTranslucent() {
@@ -638,15 +659,36 @@ KeepWindowTranslucent(hwnd) {
         processName := StrLower(WinGetProcessName("ahk_id " hwnd))
         if processName = "yasb.exe" || processName = "komorebi.exe" || processName = "autohotkey64.exe"
             return
+        if processName = "brave.exe" || processName = "chrome.exe" || processName = "msedge.exe" {
+            RestoreNativeBrowserWindow(hwnd)
+            return
+        }
 
         ; DWMBlurGlass restores the legacy blur-behind API on Windows 11.
         ; Request a full-window blur region once for every normal app HWND,
         ; then retain the constant alpha so the Acrylic surface is visible.
         EnableFullWindowDwmBlur(hwnd)
 
-        ; Keep the same alpha in both states; only Komorebi's border shows focus.
-        WinSetTransparent(FocusedWindowAlpha, "ahk_id " hwnd)
+        ; Reapplying WS_EX_LAYERED on every activation makes Chromium windows
+        ; visibly repaint when returning to their workspace.
+        if WinGetTransparent("ahk_id " hwnd) != FocusedWindowAlpha
+            WinSetTransparent(FocusedWindowAlpha, "ahk_id " hwnd)
     }
+}
+
+RestoreNativeBrowserWindow(hwnd) {
+    static BlurProperty := "KomorebiFullWindowDwmBlur"
+
+    ; Browsers keep their native frame; AHK must not add a layered/translucent
+    ; style that changes the dimensions Komorebi measures during startup.
+    if WinGetTransparent("ahk_id " hwnd) != ""
+        WinSetTransparent("Off", "ahk_id " hwnd)
+
+    blurBehind := Buffer(A_PtrSize = 8 ? 24 : 16, 0)
+    NumPut("UInt", 0x1, blurBehind, 0) ; DWM_BB_ENABLE
+    NumPut("Int", 0, blurBehind, 4)
+    DllCall("Dwmapi\DwmEnableBlurBehindWindow", "Ptr", hwnd, "Ptr", blurBehind, "Int")
+    DllCall("User32\RemovePropW", "Ptr", hwnd, "Str", BlurProperty, "Ptr")
 }
 
 EnableFullWindowDwmBlur(hwnd) {
@@ -685,6 +727,74 @@ HideWindowsTaskbars() {
     DetectHiddenWindows(previousSetting)
 }
 
+ApplyKomorebiWorkArea() {
+    global WindowsTaskbarHidden
+
+    ; Komorebi sizes against Windows' work area, which still excludes taskbars
+    ; hidden with ShowWindow. Match taskbars to Komorebi's physical monitor
+    ; rectangles and reclaim the reserved edge at its actual DPI-scaled size.
+    try {
+        state := JsonParse(CaptureKomorebiJson("state"))
+        monitors := state["monitors"]["elements"]
+        taskbars := []
+
+        if WindowsTaskbarHidden {
+            previousSetting := A_DetectHiddenWindows
+            DetectHiddenWindows(true)
+            try {
+                for className in ["Shell_TrayWnd", "Shell_SecondaryTrayWnd"] {
+                    for hwnd in WinGetList("ahk_class " className) {
+                        WinGetPos(&x, &y, &width, &height, "ahk_id " hwnd)
+                        if width > 0 && height > 0
+                            taskbars.Push(Map("x", x, "y", y, "width", width, "height", height))
+                    }
+                }
+            } finally {
+                DetectHiddenWindows(previousSetting)
+            }
+        }
+
+        for monitorIndex, monitor in monitors {
+            size := monitor["size"]
+            monitorLeft := size["left"]
+            monitorTop := size["top"]
+            monitorRight := monitorLeft + size["right"]
+            monitorBottom := monitorTop + size["bottom"]
+            ; Account for Komorebi's frame geometry so tiled windows align
+            ; with YASB's approximately 8 px outer edge on every monitor.
+            left := 4
+            top := -1
+            right := 8
+            bottom := 1
+
+            for taskbar in taskbars {
+                centerX := taskbar["x"] + (taskbar["width"] / 2)
+                centerY := taskbar["y"] + (taskbar["height"] / 2)
+                if centerX < monitorLeft || centerX >= monitorRight
+                    || centerY < monitorTop || centerY >= monitorBottom
+                    continue
+
+                if taskbar["width"] >= taskbar["height"] {
+                    if centerY < monitorTop + ((monitorBottom - monitorTop) / 2) {
+                        top -= taskbar["height"]
+                        bottom -= taskbar["height"]
+                    } else {
+                        bottom -= taskbar["height"]
+                    }
+                } else if centerX < monitorLeft + ((monitorRight - monitorLeft) / 2) {
+                    left -= taskbar["width"]
+                    right -= taskbar["width"]
+                } else {
+                    right -= taskbar["width"]
+                }
+            }
+
+            Komorebic("monitor-work-area-offset " (monitorIndex - 1) " -- " left " " top " " right " " bottom)
+        }
+        Komorebic("retile", false)
+    }
+}
+
 ToggleWindowsTaskbars() {
     global WindowsTaskbarHidden
     WindowsTaskbarHidden := !WindowsTaskbarHidden
@@ -696,6 +806,7 @@ ToggleWindowsTaskbars() {
             DllCall("ShowWindow", "Ptr", hwnd, "Int", WindowsTaskbarHidden ? 0 : 5)
     }
     DetectHiddenWindows(previousSetting)
+    ApplyKomorebiWorkArea()
 
     TrayTip(WindowsTaskbarHidden ? "Native taskbar fully hidden." : "Native taskbar restored.", "Windows Taskbar", 1)
 }
@@ -775,10 +886,10 @@ RefreshManagedWindowCache(*) {
         workspaces := monitor["workspaces"]
         workspace := workspaces["elements"][workspaces["focused"] + 1]
         layout := workspace["layout"]
-        isBsp := layout is Map && layout.Has("Default") && layout["Default"] = "BSP"
+        isGrid := layout is Map && layout.Has("Default") && layout["Default"] = "Grid"
         hasMonocle := workspace["monocle_container"] is Map
         hasMaximized := workspace["maximized_window"] is Map
-        snapshot["supported"] := isBsp && !hasMonocle && !hasMaximized
+        snapshot["supported"] := isGrid && !hasMonocle && !hasMaximized
 
         for container in workspace["containers"]["elements"] {
             windows := container["windows"]["elements"]
@@ -932,8 +1043,8 @@ EnableDragAnimation() {
 }
 
 DisableDragAnimation() {
-    ; Movement animation is the persistent baseline; preserve it after a drag.
-    Komorebic("animation --animation-type movement enable", false)
+    ; Keep ordinary tiling instantaneous; animation is used only while dragging.
+    Komorebic("animation --animation-type movement disable", false)
 }
 
 FindTileByHwnd(hwnd) {
@@ -1207,7 +1318,7 @@ m::{
 +w::Komorebic("retile")
 $*Enter::{
     ; One mutually-exclusive dispatcher prevents the plain and Shift variants
-    ; from competing when Caps/F13 is supplied by the external key mapping.
+    ; from competing when Caps or an optional external F13 mapping is held.
     openDropdown := GetKeyState("Shift", "P")
     if openDropdown
         ToggleDropdownTerminal()
@@ -1221,18 +1332,18 @@ $*Enter::{
 +e::ToggleDropdownApp("explorer")
 +r::ToggleDropdownApp("notepad")
 e::Run("explorer.exe")
-b::Run("https://")
+b::Run('"' BraveExe '"')
 $+s::Run("ms-screenclip:")
 PrintScreen::Run('powershell.exe -NoProfile -STA -WindowStyle Hidden -ExecutionPolicy Bypass -File "' ScreenshotHelper '"', , "Hide")
-a::Komorebic("cycle-workspace previous")
-s::Komorebic("cycle-workspace next")
+a::CycleWorkspace("previous")
+s::CycleWorkspace("next")
 d::ToggleYasbQuickLaunch()
 w::SendEvent("^!+{F12}")
-1::Komorebic("focus-workspace 0")
-2::Komorebic("focus-workspace 1")
-3::Komorebic("focus-workspace 2")
-4::Komorebic("focus-workspace 3")
-5::Komorebic("focus-workspace 4")
+1::FocusWorkspace(0)
+2::FocusWorkspace(1)
+3::FocusWorkspace(2)
+4::FocusWorkspace(3)
+5::FocusWorkspace(4)
 +1::MoveAndFollow(0)
 +2::MoveAndFollow(1)
 +3::MoveAndFollow(2)
@@ -1243,6 +1354,14 @@ w::SendEvent("^!+{F12}")
 ^Right::Komorebic("cycle-move-to-monitor next")
 ^Down::Komorebic("cycle-move-to-monitor next")
 #HotIf
+
+; Reserve Super for this configuration and prevent Windows Start from opening
+; when either Windows key is pressed by itself. Physical-state shortcut
+; detection above continues to work for all configured Super chords.
+*LWin::return
+*RWin::return
+
 #HotIf MainModifier = "Caps"
+*CapsLock::return
 *F13::return
 #HotIf

@@ -97,7 +97,7 @@ widgets:
       label: ""
       search_placeholder: "Type to search..."
       remember_last_query: false
-      max_results: 8
+      max_results: 16
       show_icons: true
       icon_size: 26
       home_page: false
@@ -113,8 +113,14 @@ widgets:
           show_description: false
         settings:
           enabled: true
-          prefix: "@"
+          prefix: "*"
           priority: 2
+        file_search:
+          enabled: true
+          prefix: "*"
+          priority: 3
+          backend: "index"
+          show_path: true
       popup:
         width: 500
         height: 420
