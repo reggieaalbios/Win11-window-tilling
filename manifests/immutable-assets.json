@@ -17,6 +17,14 @@
       "file": "DWMBlurGlass.2.3.2_Beta3_x64.zip",
       "url": "https://github.com/Maplespe/DWMBlurGlass/releases/download/2.3.2b3/DWMBlurGlass.2.3.2_Beta3_x64.zip",
       "sha256": "32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51"
+    },
+    {
+      "component": "wallpapers", "version": "c5e1780c29adca428dc4ca2d970bd1a6a09f18f3",
+      "repository": "JaKooLit/Wallpaper-Bank", "directory": "wallpapers",
+      "treeApiUrl": "https://api.github.com/repos/JaKooLit/Wallpaper-Bank/git/trees/c5e1780c29adca428dc4ca2d970bd1a6a09f18f3?recursive=1",
+      "rawBaseUrl": "https://raw.githubusercontent.com/JaKooLit/Wallpaper-Bank/c5e1780c29adca428dc4ca2d970bd1a6a09f18f3/wallpapers",
+      "fileCount": 163, "totalBytes": 942253131,
+      "integrity": "Each downloaded file must match the Git blob SHA-1 recorded by the immutable commit tree."
     }
   ]
 }

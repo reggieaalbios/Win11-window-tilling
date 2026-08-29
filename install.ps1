@@ -3,7 +3,7 @@ param(
     [ValidateSet('Install','Reinstall','Repair','Doctor','Uninstall')]
     [string]$Action = 'Install',
     [ValidateSet('Win','Caps')]
-    [string]$MainModifier = 'Win',
+    [string]$MainModifier = 'Caps',
     [switch]$NonInteractive,
     [switch]$ForceReinstall,
     [switch]$ForceUninstall,
@@ -55,7 +55,8 @@ $script:total = switch ($Action) {
     'Reinstall' { 11 }
     'Doctor'    { 1 }
     'Uninstall' { if ($RemoveDependencies) { 5 } else { 4 } }
-    default     { 6 } # Install / Repair
+    'Repair'    { 8 }
+    default     { 7 } # Install
 }
 
 function Write-Stage([string]$Name,[string]$Detail) {
@@ -107,7 +108,9 @@ function Invoke-SelfElevation {
     # it just can't be injected via a crafted command line.
     Write-Host 'Administrator permission is required for machine-level components.' -ForegroundColor Yellow
     $process = Start-Process powershell.exe -Verb RunAs -ArgumentList (Join-QuotedArguments $values) -Wait -PassThru
-    exit $process.ExitCode
+    if ($process.ExitCode -ne 0) {
+        throw "Elevated installer failed with exit code $($process.ExitCode). Review '$($paths.LogRoot)' and the error shown in the elevated window."
+    }
 }
 function Confirm-Choice([string]$Prompt,[bool]$DefaultNo=$true) {
     if ($NonInteractive) { return $true }
@@ -173,7 +176,7 @@ function Remove-WwtOperationCaches([string[]]$KeepOperationIds = @()) {
         }
         $nestedReparsePoints = @(Get-ChildItem -LiteralPath $directory.FullName -Recurse -Force -ErrorAction SilentlyContinue |
             Where-Object { ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 })
-        if ($nestedReparsePoints.Count -gt 0) {
+        if (@($nestedReparsePoints).Count -gt 0) {
             throw "Refusing to prune cache entry containing reparse points: $($directory.FullName)"
         }
 
@@ -248,7 +251,7 @@ function Save-PreparationArtifacts([object[]]$Inventory,[switch]$IncludeRecovery
         if ($component.PSObject.Properties.Name -contains 'asset' -and $component.asset -and $component.asset.PSObject.Properties.Name -contains 'sha256' -and $component.asset.sha256) {
             $expected = $component.asset.sha256
             $matched = @($downloadedFiles | Where-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash -eq $expected })
-            if ($matched.Count -eq 0) { throw "Downloaded WinGet artifact for '$($component.id)' does not match the pinned SHA256 in the manifest." }
+            if (@($matched).Count -eq 0) { throw "Downloaded WinGet artifact for '$($component.id)' does not match the pinned SHA256 in the manifest." }
         } else {
             Write-Warning "No pinned SHA256 for winget component '$($component.id)'; integrity relies solely on WinGet's own source trust."
         }
@@ -369,7 +372,10 @@ if ($Action -eq 'Reinstall' -and $NonInteractive -and -not $ForceReinstall) { th
 if ($Action -eq 'Uninstall' -and $NonInteractive -and -not $ForceUninstall) { throw 'Non-interactive uninstall requires -ForceUninstall.' }
 
 $mutating = $Action -in @('Install','Reinstall','Repair','Uninstall')
-if ($mutating -and -not (Test-Administrator)) { Invoke-SelfElevation }
+if ($mutating -and -not (Test-Administrator)) {
+    Invoke-SelfElevation
+    return
+}
 
 $backup = $null
 $preparation = $null
@@ -377,14 +383,23 @@ $inventory = @()
 try {
     Write-Stage 'preflight' 'Checking Windows, manifest, and component capabilities'
     $inventory = @(Show-Plan)
+    if ($SnapshotCommit -or $SnapshotSha256) {
+        $snapshotPath = Join-Path $RepositoryRoot 'snapshot.json'
+        if (-not (Test-Path -LiteralPath $snapshotPath)) { throw 'Bootstrap provenance is missing from the downloaded source snapshot.' }
+        try { $snapshot = Get-Content -LiteralPath $snapshotPath -Raw | ConvertFrom-Json }
+        catch { throw "Bootstrap provenance is invalid JSON: $($_.Exception.Message)" }
+        if ($SnapshotCommit -and [string]$snapshot.commit -ne $SnapshotCommit) { throw 'Bootstrap commit provenance does not match the installer arguments.' }
+        if ($SnapshotSha256 -and [string]$snapshot.archiveSha256 -ne $SnapshotSha256) { throw 'Bootstrap archive provenance does not match the installer arguments.' }
+    }
     if ($Action -eq 'Doctor') {
         $health = @(Get-WwtHealth -RepositoryRoot $RepositoryRoot)
         $health | Format-Table Name,Healthy,Required,Detail -AutoSize
-        if (@($health | Where-Object { $_.Required -and -not $_.Healthy }).Count) { exit 2 }
-        exit 0
+        $doctorFailures = @($health | Where-Object { $_.Required -and -not $_.Healthy })
+        if (@($doctorFailures).Count) { throw "Doctor found unhealthy required components: $(($doctorFailures.Name) -join ', ')" }
+        return
     }
 
-    if (-not $NonInteractive -and -not (Confirm-Choice 'Continue? [y/N]')) { exit 0 }
+    if (-not $NonInteractive -and -not (Confirm-Choice 'Continue? [y/N]')) { return }
     if ($mutating) { Remove-WwtOperationCaches -KeepOperationIds @($operationId) }
     if ($Action -eq 'Uninstall') {
         Write-Stage 'backup' 'Preserving managed baselines before uninstall'
@@ -399,7 +414,7 @@ try {
         Write-Stage 'complete' 'Uninstall completed; dependencies were kept unless explicitly selected'
         Remove-WwtOperationCaches
         Write-Progress -Activity "Win11 Window Tiling - $Action" -Completed
-        exit 0
+        return
     }
 
     if ($Action -eq 'Reinstall') {
@@ -421,16 +436,30 @@ try {
         if ($InjectFailureStage -eq 'dependency-installation') { throw 'Injected failure during dependency installation.' }
         Install-WwtMissingDependencies -RepositoryRoot $RepositoryRoot -ReinstallAll | Out-Null
     } elseif ($Action -eq 'Install') {
+        Write-Stage 'backup' 'Preserving existing configuration and startup ownership before installation'
+        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId -IncludeMachineState
         Write-Stage 'dependencies' 'Installing only missing or incompatible dependencies'
         Install-WwtMissingDependencies -RepositoryRoot $RepositoryRoot | Out-Null
     } else {
+        Write-Stage 'backup' 'Preserving the current configuration and startup ownership before repair'
+        $backup = Backup-WwtStack -RepositoryRoot $RepositoryRoot -OperationId $operationId -IncludeMachineState
         Write-Stage 'dependencies' 'Repairing missing dependencies without upgrading healthy ones'
         Install-WwtMissingDependencies -RepositoryRoot $RepositoryRoot | Out-Null
     }
 
+    if ($Action -eq 'Repair') {
+        Write-Stage 'stop' 'Stopping managed desktop processes before repair deployment'
+        Stop-WwtProcesses
+    }
     Write-Stage 'configuration' 'Rendering and deploying the selected modifier variant'
     $mode = if ($Action -eq 'Repair') { 'Repair' } elseif ($Action -eq 'Reinstall') { 'Upgrade' } else { 'Install' }
     Install-WwtConfiguration -RepositoryRoot $RepositoryRoot -MainModifier $MainModifier -OperationMode $mode -SnapshotCommit $SnapshotCommit -SnapshotSha256 $SnapshotSha256 -InjectFailureStage $InjectFailureStage -Apply | Out-Host
+    $startupScript = Join-Path $env:USERPROFILE '.config\komorebi\start-komorebi.ps1'
+    if (Test-Path -LiteralPath $startupScript) {
+        Write-Stage 'startup' 'Starting the configured desktop stack for this session'
+        $startupArguments = '-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File "{0}"' -f $startupScript
+        Start-Process powershell.exe -ArgumentList $startupArguments -WindowStyle Hidden | Out-Null
+    }
     Write-Stage 'doctor' 'Validating component health and runtime ownership'
     $health = @(Get-WwtHealth -RepositoryRoot $RepositoryRoot)
     $health | Format-Table Name,Healthy,Required,Detail -AutoSize
@@ -443,8 +472,12 @@ try {
     if ($PauseOnExit) { Wait-WwtInstallerExit }
 }
 catch {
-    Write-WwtLog -RepositoryRoot $RepositoryRoot -Event 'operation-failed' -Level Error -Data @{ operationId=$operationId; action=$Action; stage=$script:stage; message=$_.Exception.Message }
-    Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $Action -Step $script:stage -Status failed -OperationId $operationId | Out-Null
+    $failureException = $_.Exception
+    $failureMessage = "Action '$Action' failed at stage '$script:stage': $($failureException.Message)"
+    try { Write-WwtLog -RepositoryRoot $RepositoryRoot -Event 'operation-failed' -Level Error -Data @{ operationId=$operationId; action=$Action; stage=$script:stage; message=$failureException.Message } }
+    catch { Write-Warning "Could not write the installer failure log: $($_.Exception.Message)" }
+    try { Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $Action -Step $script:stage -Status failed -OperationId $operationId | Out-Null }
+    catch { Write-Warning "Could not write the installer failure checkpoint: $($_.Exception.Message)" }
     if ($Action -eq 'Reinstall' -and $backup) {
         Write-Host "Reinstall failed during '$script:stage'. Restoring the previous configuration and state..." -ForegroundColor Red
         try {
@@ -457,12 +490,22 @@ catch {
         } catch {
             Write-Host "Rollback also failed: $($_.Exception.Message)" -ForegroundColor Red
         }
+    } elseif ($Action -in @('Install','Repair') -and $backup) {
+        Write-Host "$Action failed during '$script:stage'. Restoring the previous configuration and startup ownership..." -ForegroundColor Red
+        try {
+            Stop-WwtProcesses
+            Remove-WwtManagedTargets
+            Restore-WwtStack -BackupRecordPath $backup.RecordPath
+            Write-Host 'Previous configuration and startup ownership were restored. Any successfully installed dependency is retained and will be reported by the next Repair or uninstall.' -ForegroundColor Yellow
+        } catch {
+            Write-Host "Configuration rollback also failed: $($_.Exception.Message)" -ForegroundColor Red
+        }
     }
     if ($mutating) {
         try { Remove-WwtOperationCaches -KeepOperationIds @($operationId) }
         catch { Write-Warning "Could not prune old operation caches: $($_.Exception.Message)" }
     }
-    Write-Error "Action '$Action' failed at stage '$script:stage': $($_.Exception.Message)" -ErrorAction Continue
+    Write-Host $failureMessage -ForegroundColor Red
     if ($PauseOnExit -or $PauseOnFailure) { Wait-WwtInstallerExit }
-    exit 1
+    throw $failureMessage
 }

@@ -1,0 +1,10 @@
+JaKooLit Wallpaper-Bank
+Source: https://github.com/JaKooLit/Wallpaper-Bank/tree/main/wallpapers
+Retrieved: 2026-08-15
+
+This folder contains the repository's top-level static wallpaper files.
+The Dynamic-Wallpapers directory was intentionally excluded.
+
+The repository notes that these wallpapers are collected from sources such as
+Alphacoders, Wallhaven, and Wallpaper-clan and are not authored by JaKooLit.
+Refer to the upstream repository and original sources for ownership and usage terms.

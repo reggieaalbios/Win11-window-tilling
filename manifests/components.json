@@ -4,7 +4,7 @@
     "ordinaryPackages": "skip-capable-or-install-latest-stable",
     "automaticUpgrades": false,
     "allowPrerelease": false,
-    "immutableExceptions": ["yasb", "dwmblurglass"]
+    "immutableExceptions": ["yasb", "dwmblurglass", "wallpapers"]
   },
   "platform": { "minimumBuild": 22000, "architecture": "x64", "requiresAdministrator": true },
   "components": [
@@ -74,7 +74,14 @@
     },
     {
       "id": "wallpapers", "required": true, "installStrategy": "bundled-config", "commands": [],
-      "detectionPaths": ["%USERPROFILE%\\Pictures\\Wallpapers\\wwt-mountain-dawn.png", "%USERPROFILE%\\Pictures\\Wallpapers\\jakoolit-anime-purple-eyes.png"], "minimumCapability": "WWT-owned wallpaper assets", "healthCheck": "bundled assets present"
+      "detectionPaths": ["%USERPROFILE%\\Pictures\\Wallpapers\\Anime-Purple-eyes.png", "%USERPROFILE%\\Pictures\\Wallpapers\\JAKOOLIT-WALLPAPER-SOURCE.txt"],
+      "minimumCapability": "pinned JaKooLit top-level wallpaper collection", "healthCheck": "canonical wallpaper and collection provenance present",
+      "asset": {
+        "repository": "JaKooLit/Wallpaper-Bank", "commit": "c5e1780c29adca428dc4ca2d970bd1a6a09f18f3",
+        "directory": "wallpapers", "fileCount": 163, "totalBytes": 942253131,
+        "treeApiUrl": "https://api.github.com/repos/JaKooLit/Wallpaper-Bank/git/trees/c5e1780c29adca428dc4ca2d970bd1a6a09f18f3?recursive=1",
+        "rawBaseUrl": "https://raw.githubusercontent.com/JaKooLit/Wallpaper-Bank/c5e1780c29adca428dc4ca2d970bd1a6a09f18f3/wallpapers"
+      }
     }
   ]
 }

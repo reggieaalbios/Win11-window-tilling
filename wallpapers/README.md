@@ -25,6 +25,12 @@ Final prompt:
 
 The installer adds approved assets without replacing an existing collection.
 
+Fresh installations also download the complete 163-file top-level static
+collection from JaKooLit's Wallpaper-Bank at the immutable commit
+`c5e1780c29adca428dc4ca2d970bd1a6a09f18f3`. Each file is checked against its
+Git blob hash before deployment. The separate `Dynamic-Wallpapers` directory is
+intentionally excluded, matching the maintained Windows setup.
+
 `jakoolit-anime-purple-eyes.png` is bundled from JaKooLit's Wallpaper-Bank so
 fresh installs have the same wallpaper menu asset as the maintained setup.
 

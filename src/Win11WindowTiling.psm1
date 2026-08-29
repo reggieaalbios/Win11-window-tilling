@@ -75,7 +75,14 @@ function Install-WwtStartupOwnership {
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument ('-NoProfile -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $scriptPath)
     $trigger = New-ScheduledTaskTrigger -AtLogOn -User ([Security.Principal.WindowsIdentity]::GetCurrent().Name)
     $principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
-    $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -MultipleInstances IgnoreNew -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
+    $settings = New-ScheduledTaskSettingsSet `
+        -AllowStartIfOnBatteries `
+        -DontStopIfGoingOnBatteries `
+        -StartWhenAvailable `
+        -MultipleInstances IgnoreNew `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) `
+        -RestartCount 3 `
+        -RestartInterval (New-TimeSpan -Minutes 1)
     Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Settings $settings -Description 'Starts the Win11 Window Tiling desktop stack once per sign-in.' -Force | Out-Null
     if ($null -ne $runValue) { Remove-ItemProperty -LiteralPath $runPath -Name $runName -Force }
 
@@ -98,6 +105,20 @@ function Uninstall-WwtStartupOwnership {
     if ($null -ne $Record.previousRunValue) {
         New-Item -Path $Record.runKeyPath -Force | Out-Null
         Set-ItemProperty -LiteralPath $Record.runKeyPath -Name $Record.runValueName -Value $Record.previousRunValue
+    }
+}
+
+function Set-WwtDesktopWallpaper {
+    param([Parameter(Mandatory)][string]$Path)
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    if (-not ('Wwt.NativeMethods' -as [type])) {
+        Add-Type -Namespace Wwt -Name NativeMethods -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode, SetLastError = true)]
+public static extern bool SystemParametersInfo(int action, int parameter, string value, int flags);
+'@
+    }
+    if (-not [Wwt.NativeMethods]::SystemParametersInfo(20, 0, $resolved, 3)) {
+        throw "Windows rejected the default wallpaper: $resolved"
     }
 }
 
@@ -151,10 +172,20 @@ function Get-WwtHealth {
     }
     $task = Get-ScheduledTask -TaskName 'Komorebi Delayed Startup' -ErrorAction SilentlyContinue
     $startupScript = Join-Path $env:USERPROFILE '.config\komorebi\start-komorebi.ps1'
+    $currentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent().Name
     $startupHealthy = [bool]$task -and (Test-Path -LiteralPath $startupScript)
     if ($task) {
         $managedAction = @($task.Actions | Where-Object { $_.Arguments -like "*$startupScript*" }).Count -gt 0
-        $startupHealthy = $startupHealthy -and $managedAction
+        $logonTrigger = @($task.Triggers | Where-Object {
+            $_.CimClass.CimClassName -eq 'MSFT_TaskLogonTrigger' -and
+            ($_.UserId -eq $currentIdentity -or $_.UserId -eq $env:USERNAME)
+        }).Count -gt 0
+        $startupHealthy = $startupHealthy -and $managedAction -and $logonTrigger -and
+            $task.Settings.Enabled -and $task.Settings.StartWhenAvailable -and
+            $task.Settings.RestartCount -ge 3 -and
+            $task.Settings.ExecutionTimeLimit -eq 'PT0S' -and
+            $task.Principal.LogonType -eq 'Interactive' -and
+            $task.Principal.RunLevel -eq 'Limited'
     }
     $results.Add([pscustomobject]@{ Name='startup-task'; Healthy=$startupHealthy; Required=$true; Detail=if($task){"$($task.State); $startupScript"}else{'not detected'} })
     $komorebiConfig = Join-Path $env:USERPROFILE '.config\komorebi\komorebi.json'
@@ -237,10 +268,78 @@ function Copy-WwtManagedFile {
     $Records.Add([pscustomobject]$record)
 }
 
+function Get-WwtGitBlobHash {
+    param([Parameter(Mandatory)][string]$Path)
+    $file = Get-Item -LiteralPath $Path
+    $sha1 = [Security.Cryptography.SHA1]::Create()
+    $stream = [IO.File]::OpenRead($file.FullName)
+    try {
+        $header = [Text.Encoding]::UTF8.GetBytes("blob $($file.Length)`0")
+        [void]$sha1.TransformBlock($header,0,$header.Length,$null,0)
+        $buffer = New-Object byte[] (1024 * 1024)
+        while (($read = $stream.Read($buffer,0,$buffer.Length)) -gt 0) {
+            [void]$sha1.TransformBlock($buffer,0,$read,$null,0)
+        }
+        [void]$sha1.TransformFinalBlock((New-Object byte[] 0),0,0)
+        ([BitConverter]::ToString($sha1.Hash)).Replace('-','').ToLowerInvariant()
+    }
+    finally { $stream.Dispose(); $sha1.Dispose() }
+}
+
+function Add-WwtWallpaperBankToStaging {
+    param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$StagingRoot)
+    $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
+    $component = @($manifest.components | Where-Object id -eq 'wallpapers')[0]
+    if (-not $component -or -not $component.asset) { throw 'Pinned wallpaper asset metadata is missing.' }
+    $asset = $component.asset
+    $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
+    $cache = Join-Path $paths.ArtifactRoot ("wallpaper-bank\{0}" -f [string]$asset.commit)
+    New-Item -ItemType Directory -Path $cache -Force | Out-Null
+
+    try {
+        $tree = Invoke-RestMethod -UseBasicParsing -Headers @{'User-Agent'='Win11-window-tilling'} -Uri ([string]$asset.treeApiUrl)
+    } catch { throw "Could not retrieve the pinned JaKooLit wallpaper inventory: $($_.Exception.Message)" }
+    if ($tree.truncated) { throw 'GitHub returned a truncated wallpaper inventory.' }
+    $prefix = ([string]$asset.directory).Trim('/') + '/'
+    $files = @($tree.tree | Where-Object {
+        $_.type -eq 'blob' -and $_.path.StartsWith($prefix) -and $_.path.Substring($prefix.Length) -notmatch '/'
+    })
+    $totalBytes = ($files | Measure-Object -Property size -Sum).Sum
+    if (@($files).Count -ne [int]$asset.fileCount -or [long]$totalBytes -ne [long]$asset.totalBytes) {
+        throw "Pinned wallpaper inventory mismatch: expected $($asset.fileCount) files/$($asset.totalBytes) bytes, received $(@($files).Count) files/$totalBytes bytes."
+    }
+
+    $destination = Join-Path $StagingRoot 'Pictures\Wallpapers'
+    New-Item -ItemType Directory -Path $destination -Force | Out-Null
+    $index = 0
+    foreach ($entry in $files) {
+        $index++
+        $name = $entry.path.Substring($prefix.Length)
+        Write-Progress -Activity 'Preparing JaKooLit wallpapers' -Status "$index/$(@($files).Count): $name" -PercentComplete (($index / @($files).Count) * 100)
+        $cached = Join-Path $cache $name
+        $valid = (Test-Path -LiteralPath $cached) -and ((Get-WwtGitBlobHash -Path $cached) -eq [string]$entry.sha)
+        if (-not $valid) {
+            $encodedName = [Uri]::EscapeDataString($name).Replace('%2F','/')
+            $temporary = "$cached.download"
+            try {
+                Invoke-WebRequest -UseBasicParsing -Headers @{'User-Agent'='Win11-window-tilling'} `
+                    -Uri (([string]$asset.rawBaseUrl).TrimEnd('/') + '/' + $encodedName) -OutFile $temporary
+                if ((Get-WwtGitBlobHash -Path $temporary) -ne [string]$entry.sha) { throw "Git blob hash mismatch for '$name'." }
+                Move-Item -LiteralPath $temporary -Destination $cached -Force
+            } catch {
+                if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+                throw "Wallpaper download $index/$(@($files).Count) failed for '$name': $($_.Exception.Message)"
+            }
+        }
+        Copy-Item -LiteralPath $cached -Destination (Join-Path $destination $name) -Force
+    }
+    Write-Progress -Activity 'Preparing JaKooLit wallpapers' -Completed
+}
+
 function Install-WwtConfiguration {
     param(
         [Parameter(Mandatory)][string]$RepositoryRoot,
-        [ValidateSet('Win','Caps')][string]$MainModifier = 'Win',
+        [ValidateSet('Win','Caps')][string]$MainModifier = 'Caps',
         [ValidateSet('Install','Upgrade','Repair')][string]$OperationMode = 'Install',
         [string]$SnapshotCommit,
         [string]$SnapshotSha256,
@@ -255,7 +354,9 @@ function Install-WwtConfiguration {
     if ($missing) { throw "Required dependencies are missing: $(($missing.id) -join ', ')." }
 
     $staging = Join-Path $paths.ProductRoot 'staging\config'
+    if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force }
     & (Join-Path $RepositoryRoot 'scripts\render-config.ps1') -OutputRoot $staging -MainModifier $MainModifier | Out-Null
+    Add-WwtWallpaperBankToStaging -RepositoryRoot $RepositoryRoot -StagingRoot $staging
     if (-not $Apply) {
         return [pscustomobject]@{ Mode='Install'; Applied=$false; Staging=$staging; Message='Preflight passed; no live files changed. Use -Apply to deploy.' }
     }
@@ -285,6 +386,35 @@ function Install-WwtConfiguration {
         $destination = Join-Path $env:USERPROFILE $relative
         $priorRecord = if ($existingFiles.ContainsKey($destination)) { $existingFiles[$destination] } else { $null }
         Copy-WwtManagedFile -Source $file.FullName -Destination $destination -BackupRoot $backupRoot -Records $records -ExistingRecord $priorRecord
+    }
+
+    # Reproduce the repository's canonical purple desktop on the first run.
+    # Seed the exact palette so fresh machines do not vary with image decoder,
+    # clustering, or cached-theme history, then let the normal theme engine
+    # generate every dependent YASB/Komorebi/WezTerm/Oh My Posh file.
+    $defaultWallpaper = Join-Path $env:USERPROFILE 'Pictures\Wallpapers\Anime-Purple-eyes.png'
+    $defaultThemePath = Join-Path $env:USERPROFILE '.config\theme-engine\default-theme.json'
+    $themeEngine = Join-Path $env:USERPROFILE '.config\theme-engine\theme-engine.ps1'
+    if (-not (Test-Path -LiteralPath $defaultWallpaper) -or -not (Test-Path -LiteralPath $defaultThemePath) -or -not (Test-Path -LiteralPath $themeEngine)) {
+        throw 'Canonical wallpaper or adaptive-theme payload is missing after deployment.'
+    }
+    $wallpaperHash = (Get-FileHash -LiteralPath $defaultWallpaper -Algorithm SHA256).Hash.ToLowerInvariant()
+    $defaultTheme = Get-Content -LiteralPath $defaultThemePath -Raw | ConvertFrom-Json
+    if ([string]$defaultTheme.wallpaperHash -ne $wallpaperHash) { throw 'Canonical wallpaper and default-theme hash disagree.' }
+    $defaultTheme.wallpaper = $defaultWallpaper
+    $themeCachePath = Join-Path $paths.ProductRoot "themes\cache\$wallpaperHash\palette.json"
+    Write-WwtJson -Value $defaultTheme -Path $themeCachePath
+    $themeArguments = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Mode Apply -Image "{1}" -NoReload' -f $themeEngine,$defaultWallpaper
+    $themeProcess = Start-Process powershell.exe -ArgumentList $themeArguments -Wait -PassThru -WindowStyle Hidden
+    if ($themeProcess.ExitCode -ne 0) { throw "Default adaptive theme failed with exit code $($themeProcess.ExitCode)." }
+    Set-WwtDesktopWallpaper -Path $defaultWallpaper
+
+    # The theme engine intentionally rewrites managed outputs. Record their
+    # final hashes, not the intermediate render, so uninstall removes them.
+    foreach ($record in $records) {
+        if (Test-Path -LiteralPath $record.destination) {
+            $record.installedHash = (Get-FileHash -LiteralPath $record.destination -Algorithm SHA256).Hash
+        }
     }
     Set-WwtCheckpoint -RepositoryRoot $RepositoryRoot -Mode $OperationMode -Step configuration-deployed -OperationId $operationId | Out-Null
     $priorStartup = if ($null -ne $existingState -and $existingState.PSObject.Properties.Name -contains 'startup') { $existingState.startup } else { $null }
@@ -350,9 +480,19 @@ function Get-WwtComponentInventory {
         if ($component.id -eq 'dwmblurglass' -and $found) {
             $task = Get-ScheduledTask -TaskName 'DWMBlurGlass_Extend' -ErrorAction SilentlyContinue
             $state = Join-Path (Get-WwtPaths -RepositoryRoot $RepositoryRoot).ProductRoot 'dwmblurglass-state.json'
-            $capable = [bool]$task -and (Test-Path -LiteralPath $state)
+            $expectedConfiguration = Join-Path $RepositoryRoot 'config\dwmblurglass\config.ini'
+            $installedConfiguration = Join-Path (Split-Path -Parent $found) 'data\config.ini'
+            $configurationMatches = (Test-Path -LiteralPath $expectedConfiguration) -and
+                (Test-Path -LiteralPath $installedConfiguration) -and
+                ((Get-FileHash -LiteralPath $expectedConfiguration -Algorithm SHA256).Hash -eq
+                    (Get-FileHash -LiteralPath $installedConfiguration -Algorithm SHA256).Hash)
+            $capable = [bool]$task -and (Test-Path -LiteralPath $state) -and $configurationMatches
         }
-        if ($component.id -in @('adaptive-theme-engine','wallpapers') -and $found) { $capable = $true }
+        if ($component.installStrategy -eq 'bundled-config') {
+            $capable = @($paths).Count -gt 0 -and @($paths | Where-Object {
+                -not (Test-Path -LiteralPath ([Environment]::ExpandEnvironmentVariables([string]$_)))
+            }).Count -eq 0
+        }
         $recoverySource = $null
         if ($found -and $component.installStrategy -eq 'immutable-msi' -and $component.PSObject.Properties.Name -contains 'displayName') {
             $recoverySource = Get-WwtMsiRecoverySource -DisplayName ([string]$component.displayName)
@@ -391,7 +531,7 @@ function Get-WwtInstalledWingetVersion {
             if ($index -lt 0) { continue }
             $tail = $text.Substring($index + $PackageId.Length).Trim()
             $tokens = @($tail -split '\s+' | Where-Object { $_ })
-            if ($tokens.Count -and $tokens[0] -match '^[0-9][0-9A-Za-z.+_-]*$') { return $tokens[0] }
+            if (@($tokens).Count -and $tokens[0] -match '^[0-9][0-9A-Za-z.+_-]*$') { return $tokens[0] }
         }
     } catch { return $null }
     return $null
@@ -407,7 +547,9 @@ function Get-WwtManagedTargets {
         (Join-Path $env:USERPROFILE '.config\komorebi'),
         (Join-Path $env:USERPROFILE '.config\yasb'),
         (Join-Path $env:USERPROFILE '.config\theme-engine'),
+        (Join-Path $env:USERPROFILE '.config\ohmyposh'),
         (Join-Path $env:USERPROFILE '.wezterm.lua'),
+        (Join-Path $env:USERPROFILE 'wwt-theme.lua'),
         (Join-Path $env:USERPROFILE 'Documents\PowerShell\Microsoft.PowerShell_profile.ps1'),
         (Join-Path $env:USERPROFILE 'Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1')
     )
@@ -417,6 +559,7 @@ function Backup-WwtStack {
     param([Parameter(Mandatory)][string]$RepositoryRoot,[Parameter(Mandatory)][string]$OperationId,[switch]$IncludeMachineState)
     $paths = Get-WwtPaths -RepositoryRoot $RepositoryRoot
     $root = Join-Path $paths.BackupRoot $OperationId
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
     $records = New-Object 'System.Collections.Generic.List[object]'
     $index = 0
     $recoveryTargets = @(Get-WwtManagedTargets)
@@ -482,7 +625,7 @@ function Remove-WwtManagedTargets {
         if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
     }
     $wallpaperRoot = Join-Path $env:USERPROFILE 'Pictures\Wallpapers'
-    foreach ($wallpaperName in @('wwt-mountain-dawn.png','jakoolit-anime-purple-eyes.png')) {
+    foreach ($wallpaperName in @('wwt-mountain-dawn.png','Anime-Purple-eyes.png','jakoolit-anime-purple-eyes.png')) {
         $wallpaper = Join-Path $wallpaperRoot $wallpaperName
         if (Test-Path -LiteralPath $wallpaper) { Remove-Item -LiteralPath $wallpaper -Force }
     }
@@ -535,7 +678,7 @@ function Uninstall-WwtDependencies {
     $manifest = Read-WwtManifest -RepositoryRoot $RepositoryRoot
     $winget = Get-Command winget.exe -ErrorAction SilentlyContinue
     $components = @($manifest.components)
-    for ($index = $components.Count - 1; $index -ge 0; $index--) {
+    for ($index = @($components).Count - 1; $index -ge 0; $index--) {
         $component = $components[$index]
         if ($PreserveGuardedDwm -and $component.installStrategy -eq 'guarded-dwm') { continue }
 
@@ -549,7 +692,7 @@ function Uninstall-WwtDependencies {
             'wezterm' { $runtimeNames += @('wezterm-gui','wezterm-mux-server') }
             'dwmblurglass' { $runtimeNames += @('DWMBlurGlass','DWMBlurGlassHost') }
         }
-        if ($runtimeNames.Count) {
+        if (@($runtimeNames).Count) {
             Get-Process -Name ($runtimeNames | Select-Object -Unique) -ErrorAction SilentlyContinue |
                 Stop-Process -Force -ErrorAction SilentlyContinue
         }

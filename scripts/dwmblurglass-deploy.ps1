@@ -3,6 +3,7 @@ param(
     [ValidateSet('Install','Uninstall','Validate')][string]$Mode = 'Validate',
     [string]$ArchivePath,
     [string]$ExpectedSHA256 = '32834FED77575353CF3699E3A5C182B8D4FCD7F00926C730E94D1A1DD591BD51',
+    [string]$ConfigurationPath = (Join-Path (Split-Path -Parent $PSScriptRoot) 'config\dwmblurglass\config.ini'),
     [string]$StatePath = (Join-Path $env:ProgramData 'Win11WindowTilling\dwmblurglass-state.json'),
     [switch]$Apply
 )
@@ -19,6 +20,7 @@ function Write-State($value) {
 if ($Mode -eq 'Validate') {
     if (-not $ArchivePath -or -not (Test-Path -LiteralPath $ArchivePath)) { throw 'DWMBlurGlass archive is missing.' }
     if ((Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash -ne $ExpectedSHA256) { throw 'DWMBlurGlass archive hash mismatch.' }
+    if (-not (Test-Path -LiteralPath $ConfigurationPath)) { throw 'Canonical DWMBlurGlass configuration is missing.' }
     [pscustomobject]@{ Valid=$true; Archive=$ArchivePath; Destination=$destination; Apply=[bool]$Apply }
     return
 }
@@ -46,6 +48,7 @@ if ($Mode -eq 'Uninstall') {
 
 if (-not $ArchivePath -or -not (Test-Path -LiteralPath $ArchivePath)) { throw 'DWMBlurGlass archive is missing.' }
 if ((Get-FileHash -LiteralPath $ArchivePath -Algorithm SHA256).Hash -ne $ExpectedSHA256) { throw 'DWMBlurGlass archive hash mismatch.' }
+if (-not (Test-Path -LiteralPath $ConfigurationPath)) { throw 'Canonical DWMBlurGlass configuration is missing.' }
 $build = [int](Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion').CurrentBuildNumber
 if ($build -lt 22000) { throw "Unsupported Windows build $build." }
 
@@ -68,6 +71,8 @@ try {
     }
     New-Item -ItemType Directory -Path $destination -Force | Out-Null
     Copy-Item -Path (Join-Path $release '*') -Destination $destination -Recurse -Force
+    $deployedConfiguration = Join-Path $destination 'data\config.ini'
+    Copy-Item -LiteralPath $ConfigurationPath -Destination $deployedConfiguration -Force
     $oldSymbols = Join-Path $backup 'data\symbols'
     if (Test-Path -LiteralPath $oldSymbols) { Copy-Item -LiteralPath $oldSymbols -Destination (Join-Path $destination 'data\symbols') -Recurse -Force }
 
@@ -81,7 +86,7 @@ try {
     $task = Get-ScheduledTask -TaskName $taskName
     if ($task.State -notin @('Running','Ready')) { throw "DWMBlurGlass host task entered state '$($task.State)'." }
     $symbols = @(Get-ChildItem (Join-Path $destination 'data\symbols') -Filter '*.pdb' -File -Recurse -ErrorAction SilentlyContinue)
-    Write-State ([ordered]@{ schemaVersion=1; installedAt=(Get-Date).ToString('o'); destination=$destination; backupDirectory=if(Test-Path $backup){$backup}else{$null}; previousTaskXml=$previousTaskXml; symbolsPresent=($symbols.Count -ge 2); symbolRecovery='Host auto-downloads Microsoft symbols; preserved valid prior cache when available.' })
+    Write-State ([ordered]@{ schemaVersion=1; installedAt=(Get-Date).ToString('o'); destination=$destination; backupDirectory=if(Test-Path $backup){$backup}else{$null}; previousTaskXml=$previousTaskXml; configurationSha256=(Get-FileHash -LiteralPath $deployedConfiguration -Algorithm SHA256).Hash; symbolsPresent=($symbols.Count -ge 2); symbolRecovery='Host auto-downloads Microsoft symbols; preserved valid prior cache when available.' })
 } catch {
     Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
