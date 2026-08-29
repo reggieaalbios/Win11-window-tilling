@@ -27,8 +27,8 @@ The bootstrap requires Windows PowerShell 5.1 but does not require Git. It check
 Run a checked-out snapshot directly:
 
 ```powershell
-.\install.ps1 -Action Install -MainModifier Win
-.\install.ps1 -Action Repair -MainModifier Caps
+.\install.ps1 -Action Install
+.\install.ps1 -Action Repair -MainModifier Win
 .\install.ps1 -Action Doctor
 .\install.ps1 -Action Uninstall
 ```

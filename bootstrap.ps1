@@ -3,11 +3,14 @@ param(
     [ValidateSet('Install','Reinstall','Repair','Doctor','Uninstall')]
     [string]$Action = 'Install',
     [ValidateSet('Win','Caps')]
-    [string]$MainModifier = 'Win',
+    [string]$MainModifier = 'Caps',
     [switch]$NonInteractive,
     [switch]$ForceReinstall,
+    [switch]$ForceUninstall,
+    [switch]$RemoveDependencies,
     [string]$Repository = 'reggieaalbios/Win11-window-tilling',
-    [string]$Ref = 'main'
+    [string]$Ref = 'main',
+    [string]$ExpectedCommit
 )
 
 Set-StrictMode -Version 2.0
@@ -46,7 +49,8 @@ if ($Action -eq 'Install' -and -not (Test-Path -LiteralPath $statePath)) {
     if (Test-Path -LiteralPath $operationStatePath) {
         try {
             $previousOperation = Get-Content -LiteralPath $operationStatePath -Raw | ConvertFrom-Json
-            if ($previousOperation.status -in @('failed','running')) {
+            $interruptedMutation = $previousOperation.mode -in @('Install','Reinstall','Repair','Uninstall')
+            if ($interruptedMutation -and $previousOperation.status -in @('failed','running')) {
                 Write-Host "Previous operation was interrupted at '$($previousOperation.step)'; continuing with repair instead of downloading and purging the stack again." -ForegroundColor Yellow
                 $Action = 'Repair'
             }
@@ -59,17 +63,17 @@ if ($Action -eq 'Install' -and -not (Test-Path -LiteralPath $statePath)) {
 if ($Action -eq 'Install' -and (Test-WwtExistingInstall)) {
     Write-Host 'Win11 Window Tiling is already installed.' -ForegroundColor Yellow
     if ($NonInteractive) {
-        if (-not $ForceReinstall) { exit 0 }
+        if (-not $ForceReinstall) { return }
         $Action = 'Reinstall'
     } else {
         $answer = Read-Host 'Do you wish to reinstall? [y/N]'
-        if ($answer -notmatch '^[Yy]$') { exit 0 }
+        if ($answer -notmatch '^[Yy]$') { return }
         $Action = 'Reinstall'
     }
 }
 if ($Action -eq 'Reinstall' -and $NonInteractive -and -not $ForceReinstall) {
     Write-Host 'Non-interactive reinstall requires -ForceReinstall; no changes were made.' -ForegroundColor Yellow
-    exit 0
+    return
 }
 
 $operationId = [guid]::NewGuid().ToString('N')
@@ -84,15 +88,23 @@ try {
     $commit = Invoke-RestMethod -UseBasicParsing -Headers $headers -Uri $commitApi
     if ([string]::IsNullOrWhiteSpace([string]$commit.sha)) { throw "GitHub did not resolve '$Ref' to a commit." }
     $resolvedCommit = [string]$commit.sha
+    if ($resolvedCommit -notmatch '^[0-9a-fA-F]{40}$') { throw "GitHub returned an invalid commit identifier for '$Ref'." }
+    if ($ExpectedCommit -and $resolvedCommit -ne $ExpectedCommit) {
+        throw "Source changed while bootstrapping: expected $ExpectedCommit but '$Ref' resolved to $resolvedCommit. Rerun the bootstrap."
+    }
     $archiveUrl = "https://github.com/$Repository/archive/$resolvedCommit.zip"
     Write-Host "Downloading $Repository at $resolvedCommit..." -ForegroundColor Cyan
     Invoke-WebRequest -UseBasicParsing -Headers $headers -Uri $archiveUrl -OutFile $archivePath
     $archiveHash = (Get-FileHash -LiteralPath $archivePath -Algorithm SHA256).Hash
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractRoot -Force
-    $sourceRoot = @(Get-ChildItem -LiteralPath $extractRoot -Directory)[0].FullName
-    foreach ($required in @('install.ps1','src\Win11WindowTiling.psm1','manifests\components.json','scripts\render-config.ps1')) {
+    $sourceDirectories = @(Get-ChildItem -LiteralPath $extractRoot -Directory)
+    if ($sourceDirectories.Count -ne 1) { throw "Downloaded snapshot is invalid: expected one source directory, found $($sourceDirectories.Count)." }
+    $sourceRoot = $sourceDirectories[0].FullName
+    foreach ($required in @('install.ps1','uninstall.ps1','src\Win11WindowTiling.psm1','manifests\components.json','manifests\immutable-assets.json','scripts\render-config.ps1','scripts\dwmblurglass-deploy.ps1','config\komorebi','config\yasb','config\theme-engine','config\dwmblurglass','config\wezterm','config\ohmyposh','config\powershell','wallpapers')) {
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $required))) { throw "Downloaded snapshot is invalid: missing $required" }
     }
+    try { $null = Get-Content -LiteralPath (Join-Path $sourceRoot 'manifests\components.json') -Raw | ConvertFrom-Json }
+    catch { throw "Downloaded component manifest is invalid JSON: $($_.Exception.Message)" }
     Ensure-WinGet
 
     $snapshotRoot = Join-Path $productRoot (Join-Path 'source' $resolvedCommit)
@@ -110,11 +122,16 @@ try {
     if ($NonInteractive) { $arguments += '-NonInteractive' }
     if (-not $NonInteractive) { $arguments += '-PauseOnExit' }
     if ($ForceReinstall) { $arguments += '-ForceReinstall' }
+    if ($ForceUninstall) { $arguments += '-ForceUninstall' }
+    if ($RemoveDependencies) { $arguments += '-RemoveDependencies' }
     & powershell.exe @arguments
     if ($LASTEXITCODE -ne 0) {
         throw "Installer process failed with exit code $LASTEXITCODE. See '$productRoot\logs' for details."
     }
 }
 finally {
-    if (Test-Path -LiteralPath $downloadRoot) { Remove-Item -LiteralPath $downloadRoot -Recurse -Force }
+    if (Test-Path -LiteralPath $downloadRoot) {
+        try { Remove-Item -LiteralPath $downloadRoot -Recurse -Force -ErrorAction Stop }
+        catch { Write-Warning "Could not remove temporary bootstrap cache '$downloadRoot': $($_.Exception.Message)" }
+    }
 }
